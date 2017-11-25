@@ -21,8 +21,8 @@ MAMP <-F
  
  if (ubuntu){
      host_address<-'localhost'
-     db_user_name <-'ahmed2'
-     db_password<-'ahmed123'
+    # db_user_name <-'ahmed2'
+    # db_password<-'ahmed123'
      ROOT<- "/var/www/logs"
      JSON_LOG<-"api.logs.txt"
      MYSQL_LOG <- "mysql.log"
