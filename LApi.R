@@ -103,19 +103,25 @@ ChangeSessionState<-function(userid=0,SessionId=0,NewState=NA){
 UpdateMyState<-function(user=0,state=0){
   INDIA="Asia/Kolkata"
   if(!is.null(user) && !(is.null(state))){
-    old_state<-user_status(user)$user_state
-    new_state<-state
-    script<-"UPDATE tbl_auth SET user_state = ?x where user_id=?y"
-    sql<-sqlInterpolate(ANSI(),script,x=state,y=user)
-    rows_modified<-runsql(sql)
-    if(rows_modified==0) {
-      user_record=user_status(user)
-      user_record$warning<-"No Update happened"
-      outp<- user_record
-    } else if (rows_modified>1) {
-      outp<- (data.table(Error="Critical DB alert: Many rows updated - check DB logs"))
-      message("Critical DB alert: Many rows updated - check DB logs")
-    } else outp<- user_status(user)
+      old_state<-user_status(user)$user_state
+      if(state!=old_state) {
+          new_state<-state
+          script<-"UPDATE tbl_auth SET user_state = ?x where user_id=?y LIMIT 1"
+          sql<-sqlInterpolate(ANSI(),script,x=state,y=user)
+          rows_modified<-runsql(sql)
+          if(rows_modified==0) message("State was not changed") else {
+              script2<-sprintf("INSERT INTO state_transitions (entity_type_id, entity_id, from_state, to_state,transition_time) VALUES (%d, %d, %d, %d, '%s')",1,user,old_state,state,now())
+              rows_added<- runsql(script2)
+          }
+      } else {
+          rows_modified<-0
+          user_record <- user_status(user)
+          user_record$warning <-"No Update happened"
+          outp<- user_record
+          message("State was not changed")
+      }
+      if (rows_modified==1) 
+          outp<- user_status(user)
   } else outp<- data.table(Error="Need two parameters to this API, user and state")
 log(api="UpdateMyState",user=user, parameters= paste0("state:",state),returned_value= toJSON(outp))
 outp

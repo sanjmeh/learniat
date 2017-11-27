@@ -76,7 +76,7 @@ refresh<-function(variable_name=NULL,time_gap_hours=24,history=100){
                            "b$ques_log"=suppressWarnings(querysql(sprintf("select * from question_log where start_time> DATE_SUB(NOW(),INTERVAL %d DAY) ",history))),
                            "b$qopt"=suppressWarnings(querysql(sprintf("select * from question_options"))),
                            
-                           "b$st_tr100"= suppressWarnings(querysql(sprintf("SELECT * FROM state_transitions where transition_time>DATE_SUB(NOW(),INTERVAL %d DAY) ",history))),
+                           "b$st_tr100"= suppressWarnings(querysql(sprintf("SELECT * FROM state_transitions where transition_time>DATE_SUB(NOW(),INTERVAL %d DAY) ",history-90))),
                            "b$ss_time"=suppressWarnings(querysql(sprintf("select * from stud_session_time where last_seen> DATE_SUB(NOW(),INTERVAL %d DAY) ",history))),
                            "b$stt"=suppressWarnings(querysql(sprintf("select * from stud_topic_time where last_seen> DATE_SUB(NOW(),INTERVAL %d DAY) ",history))),
                            "b$sindx"=suppressWarnings(querysql(sprintf("select * from student_index where last_updated> DATE_SUB(NOW(),INTERVAL %d DAY) ",history))),
@@ -145,8 +145,9 @@ if((exists("b") && length(b)!=15) || !exists("b")){
 loaddata_aws<-function() {  
   db<-dbConnect(MySQL(),user=db_user_name,password=db_password,dbname=database_name,
                 host=host_address)  # connect the DB at Amazon
-  d <- setNames(lapply(smalltables, function(t) dbReadTable(db, t)), smalltables) #load all small DB tables with variable names set as the MySQL table names. 
+  d <- setNames(lapply(smalltables, function(t) {cat("^"); suppressWarnings(dbReadTable(db, t))}), smalltables) #load all small DB tables with variable names set as the MySQL table names. 
   d <<- lapply(d,update_time)
+  cat("\n")
   dbDisconnect(db)  
 } 
 
@@ -516,7 +517,7 @@ gsinsert_class_sessions<-function(number_rows=1,start_after=1,
 }
 
 shift_session<-function(session=NULL,min=5,what="both"){
-  x<-show_sessions() %>% filter(session_state<5 & class_session_id==session)
+  x<-show_sessions() %>% filter(session_state<6 & class_session_id==session)
   if(nrow(x)==1){
     new_end_time<-switch(what,both=x$ends_on + dminutes(min),end=x$ends_on + dminutes(min),x$ends_on)
     new_start_time<-switch(what,both=x$starts_on + dminutes(min),start=x$starts_on + dminutes(min),x$starts_on)
@@ -1012,7 +1013,7 @@ suggestions<-function(recency=24){
     b$suggo<<-refresh("b$suggo",time_gap_hours = recency)
     d$category<<-refresh("d$category",time_gap_hours = recency)
     d$elements<<-refresh("d$elements",time_gap_hours = recency)
-    b$sessions100 <<-refresh("d$sessions100",time_gap_hours = recency)
+    b$sessions100 <<-refresh("b$sessions100",time_gap_hours = recency)
     
     output<- d$category[b$suggo,on=.(category_id=cat_id)
                ][d$elements,on=.(category_id=cat_id),allow.cartesian=TRUE,nomatch=0
@@ -1021,6 +1022,7 @@ suggestions<-function(recency=24){
                    by=suggestion_id
                    ][d$entity_states, on=.(state=state_id),nomatch=0
                      ]
+    cat("\n")
     output
 }
 

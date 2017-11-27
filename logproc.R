@@ -50,19 +50,19 @@ apache_log<-function(file_name=APLOG){
     df2 %>% as.data.table()
 }
 
-api_flow<-function(min=60,hours=0,days=0){
-    api_archive(days=days, number_rows = days*1000,truncated = T) %>% 
-        mutate(time=ymd_hms(request_time,tz = India)) %>% 
-        filter(time>now()-ddays(days)-dhours(hours)-dminutes(min)) %>% 
-        select(1,2,3,5) ->x
-    x %>% group_by(Minute=sprintf("%02d%3s:%02d:%02d",day(time),month(time,label = T),hour(time),minute(time)),User=as.character(user_id)) %>% count(service_name) -> x1
-     json_logs(limit=1000) %>% 
-         mutate(time=ymd_hms(TIME,tz = India)) %>% 
-         filter(time>now()-ddays(days)-dhours(hours)-dminutes(min)) %>% 
-         select(time,user_id,service_name)  ->y
-     y %>% group_by(Minute=sprintf("%02d%3s:%02d:%02d",day(time),month(time,label = T),hour(time),minute(time)),User=as.character(user_id)) %>% count(service_name) ->y1
-    rbind(x1,y1) %>% arrange(Minute)
-     
+api_flow<-function(logdt=NULL){
+    logdt %>% 
+        group_by(Minute=sprintf("%02d%3s:%02d:%02d",day(time),lubridate::month(time,label = T),lubridate::hour(time), lubridate::minute(time)),User=as.character(user_id),type) %>% 
+        count(service_name) %>% 
+        arrange(Minute) %>% as.data.table()
+}
+
+
+sql_flow<- function(logdt=NULL){
+    logdt %>% 
+        group_by(Minute=sprintf("%02d%3s:%02d:%02d",day(dt),lubridate::month(dt,label = T),lubridate::hour(dt), lubridate::minute(dt)),service_name) %>% 
+        count(service_name) %>% 
+        arrange(Minute) %>% as.data.table()
 }
 
 api_log<-function(start_mdh=101112,end_mdh=101113,json_recency=5){
@@ -299,22 +299,26 @@ xmpp_new<-function(mdh1=0,mdh2=0){
         start<-suppressWarnings(ymd_h(paste0("2017",mdh1),tz = India))
         end<-  suppressWarnings(ymd_h(paste0("2017",mdh2),tz = India))
     raw_data<-suppressWarnings({querysql(sprintf("select * from archive where created_at BETWEEN '%s' AND '%s'",start, end),database = "ejabberd_1609")})
-    created_at<-ymd_hms(raw_data$created_at,tz = India)
-    raw_xml_text<-raw_data$xml
-    kind<-raw_data$kind
-    from<-str_extract(raw_data$bare_peer,"\\d+")
-    to<-str_extract(raw_data$username,"[^@]+")
-    id<-raw_data$id
-    xnodes<-lapply(raw_data$xml,read_xml)
-    type_list<-sapply(raw_data$txt,function(x) {
-        if(x!="") {
-            x1<-read_xml(x)
-            t<-xml_find_all(x1,xpath = "Type") %>% xml_text %>% as.numeric
-            return(t)
+    if(nrow(raw_data)>0){
+        created_at<-ymd_hms(raw_data$created_at,tz = India)
+        raw_xml_text<-raw_data$xml
+        kind<-raw_data$kind
+        from<-str_extract(raw_data$bare_peer,"\\d+")
+        to<-str_extract(raw_data$username,"[^@]+")
+        id<-raw_data$id
+        xnodes<-lapply(raw_data$xml,read_xml)
+        type_list<-sapply(raw_data$txt,function(x) {
+            if(x!="") {
+                x1<-read_xml(x)
+                t<-xml_find_all(x1,xpath = "Type") %>% xml_text %>% as.numeric
+                return(t)
             } else return(NA)
-    }
+        }
         )
-    data.frame(id, created_at,from,to,kind,code=type_list,body=sapply(xnodes,proc_xml),stringsAsFactors = F) %>% as.data.table %>% merge(y = xmpp_code_lookup,by = "code",all.x = T) %>% .[order(created_at)]
+        outp<- data.table(id, created_at,from,to,kind,code=type_list,body=sapply(xnodes,proc_xml),stringsAsFactors = F) %>% merge(y = xmpp_code_lookup,by = "code",all.x = T) %>% .[order(created_at)]
+    } else 
+        outp<- "No revcords found in XMPP archive table in the time range"
+    outp
 }
 
 if(!exists("xmpp_code_lookup") || is.null(at(xmpp_code_lookup))) xmpp_code_lookup <-xmpp_coding()
@@ -562,7 +566,7 @@ mlogs<-function(mdh1=0,mdh2=0,file="clean_dump.txt",width=NULL,clean_text=dump2,
 }
 
 comblog<-function(mdh1=111215,mdh2 =101316,mysql=F,
-                  xmpp_detail=1, mysql_detail=2,refresh=F,clean_file="clean_dump.txt", max_lines=100000){
+                  xmpp_detail=2, mysql_detail=2,refresh=F,clean_file="clean_dump.txt", max_lines=100000){
  #----Initialise variables -----
     parrange<-range(ymd_h(paste0('2017',mdh1),tz = India),ymd_h(paste0('2017',mdh2),tz = India))
     int_par<-interval(parrange[1],parrange[2])
@@ -656,7 +660,8 @@ comblog<-function(mdh1=111215,mdh2 =101316,mysql=F,
           # select(time,type,id,service_name,user_id,code,from,to,input_string,contents,table) %>% 
           # as.data.table()
       
-     merged_log[,.(time,id,type,service_name,user_id,code,from,to,contents,status,input_len,input_string,response_delay,output_dim1,output_dim2,xml_input,xml_output)][order(time,-type,id)]
+     #merged_log[,.(time,id,type,service_name,user_id,code,from,to,contents,status,input_len,input_string,response_delay,output_dim1,output_dim2,xml_input,xml_output)][order(time,-type,id)]
+     merged_log[,-c("xml_input","xml_output"),with=F][order(time,-type,id)]
   }
 
   
