@@ -10,17 +10,15 @@ library(lubridate)
 library(jsonlite)
 library(compareDF)
 
+this.file <- parent.frame(2)$ofile
 dev <- T
-ubuntu <- F
+ubuntu <- T
 if(ubuntu) 
     library(plumber)
 
 if(dev) database_name="jupiter_dev" else database_name="jupiter"
-if (ubuntu){
-  source("~/usr/local/plumber/testApi/quick.R")
-} else {
-  source("~/Dropbox/R-wd/quick.R")
-}
+function_source <- ifelse (ubuntu, ifelse(this.file=="~/usr/local/plumber/learniatApi/LApi.R", "~/usr/local/plumber/learniatApi/quick.R","~/usr/local/plumber/testApi/quick.R"), "~/Dropbox/R-wd/quick.R")
+source(function_source)
 
 #' @filter log
 function(req){
@@ -634,8 +632,10 @@ classid_sql<-function(session_id){
 #-----functions called from command line and NOT to be called from this source script----
 
 
-restart<-function(){
-  pr <- plumb('/home/rstudio/usr/local/plumber/testApi/LApi.R')
+restart<-function(api_file=this.file){
+  message(paste("loading functions from", function_source))
+  #pr <- plumb('/home/rstudio/usr/local/plumber/testApi/testApi.R')
+  pr<- plumb(api_file)
   pr$run(port=8100)
 }
 r<-restart
