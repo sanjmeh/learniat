@@ -13,7 +13,7 @@ library(data.table)
 #----initializations-------
 INDIA="Asia/Kolkata"
 dev <- T
-ubuntu <- F
+ubuntu <- T
 MAMP <-T 
 loaded_file <- parent.frame(2)$ofile
  if(dev) database_name="jupiter_dev" else database_name="jupiter"
@@ -1043,7 +1043,7 @@ runsql<-function(sql_text=stop("Please provide an SQL script starting with INSER
                   host=host_address,port=port)  # connect the DB
     on.exit(dbDisconnect(db))
     rows_affected<-dbExecute(db,sql_text)
-    cat(paste("\n\nExecuted successfully for rows:",rows_affected,"\nScript:",sql_text))
+    cat(paste("\nExecuted successfully for rows:",rows_affected,"\nScript:",sql_text))
     rows_affected
     }
 

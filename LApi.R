@@ -12,7 +12,7 @@ library(compareDF)
 
 this.file <- parent.frame(2)$ofile
 dev <- T
-ubuntu <- F
+ubuntu <- T
 if(ubuntu) 
     library(plumber)
 
@@ -500,6 +500,21 @@ RecordLessonTagging<-function(userid=NULL,classid=NULL,new_tags=data.table(topic
         returned_value = as.character(toJSON((changed_topics)))
     )
   changed_topics
+}
+
+#* @get /SetModel
+#* @serializer unboxedJSON
+SetModel<-function(userid=NULL,asses_id=NULL,model_flag=0){
+    script<- sprintf("update assessment_answers set model_answer = '%s' where assessment_answer_id = '%s'",model_flag, asses_id)
+    number<-runsql(script)
+    if(number==1) status="SUCCESS" else
+        status="No DB changes happened"
+    log(api = "SetModel",
+        user = userid, 
+        parameters = as.character(toJSON(data.frame(asses_id,model_flag),dataframe = 'rows')),
+        returned_value = as.character(toJSON((status)))
+    )
+    return(data.frame(Status=status))
 }
 
 
