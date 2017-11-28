@@ -504,8 +504,8 @@ RecordLessonTagging<-function(userid=NULL,classid=NULL,new_tags=data.table(topic
 
 #* @get /SetModel
 #* @serializer unboxedJSON
-SetModel<-function(userid=NULL,asses_id=NULL,model_flag=0){
-    script<- sprintf("update assessment_answers set model_answer = '%s' where assessment_answer_id = '%s'",model_flag, asses_id)
+SetModel<-function(userid=0,asses_id=0,model_flag=0){
+    script<- sprintf("update assessment_answers set model_answer = %d where assessment_answer_id = %d",as.numeric(model_flag), as.numeric(asses_id))
     number<-runsql(script)
     if(number==1) status="SUCCESS" else
         status="No DB changes happened"
