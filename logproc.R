@@ -521,7 +521,7 @@ mlogs<-function(mdh1=0,mdh2=0,file="clean_dump.txt",width=NULL,clean_text=dump2,
         int_par<-interval(start,end)
     }
     cat(paste("Starting to read", file,"...\n"))
-    dump2<-suppressWarnings(fread(file,col.names = c("dt","id","type","command")))
+    dump2<-suppressWarnings(fread(file,col.names = c("dt","id","type","command"),fill = T))
     if (nrow(dump2)<2) {
         message("Error : nothing to process")
      return("Error : nothing to process")

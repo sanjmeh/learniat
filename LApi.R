@@ -12,7 +12,7 @@ library(compareDF)
 
 this.file <- parent.frame(2)$ofile
 dev <- T
-ubuntu <- T
+ubuntu <- F
 if(ubuntu) 
     library(plumber)
 

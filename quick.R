@@ -14,8 +14,8 @@ library(data.table)
 INDIA="Asia/Kolkata"
 dev <- T
 ubuntu <- F
-MAMP <-F 
-
+MAMP <-T 
+loaded_file <- parent.frame(2)$ofile
  if(dev) database_name="jupiter_dev" else database_name="jupiter"
     dbname<-database_name
  
@@ -112,7 +112,7 @@ refresh<-function(variable_name=NULL,time_gap_hours=24,history=100){
         updated_df_withtime<-update_time(updated_df)
     } 
     if(exists("updated_df_withtime") && nrow(updated_df_withtime)<2) {
-        message(paste(variable_name,":","variable cannot be refreshed"))
+        message(paste(variable_name,":","either zero rows found or variable cannot be refreshed due to a problem"))
         }else 
         if(exists("updated_df_withtime") && (rows<-nrow(updated_df_withtime)) >1 ) cat(paste0("\nloaded:",variable_name,":",rows," rows\n")) 
     if(exists("updated_df_withtime")) updated_df_withtime else {
@@ -142,9 +142,9 @@ if((exists("b") && length(b)!=15) || !exists("b")){
     names(b)<-short_names
 }
 
-loaddata_aws<-function() {  
+load_dbtables<-function() {  
   db<-dbConnect(MySQL(),user=db_user_name,password=db_password,dbname=database_name,
-                host=host_address)  # connect the DB at Amazon
+                host=host_address,port=port)  # connect the DB at Amazon
   d <- setNames(lapply(smalltables, function(t) {cat("^"); suppressWarnings(dbReadTable(db, t))}), smalltables) #load all small DB tables with variable names set as the MySQL table names. 
   d <<- lapply(d,update_time)
   cat("\n")
@@ -171,7 +171,7 @@ table_names<-function(search=NULL){
 
 
 list_of_functions<-function(){
-    lines<-scan(file="~/Dropbox/R-wd/quick.R",what=character(),skip = 28)
+    lines<-scan(file=loaded_file,what=character(),skip = 28)
     #grepl("function",lines)
     i<-grepl("function",lines)
     fns_grouped<-{lines[i] %>% strsplit("<-")}
@@ -1096,7 +1096,7 @@ fill_missing_time<-function(table_name=NULL,column_name=NULL){
 at<-function(var=NULL) {
     if(is.data.frame(var))   
     attr(x = var,which = "last_upd") else
-        "ERROR: NO DATA FRAME IN THE VARIABLE "
+        message("ERROR: NO DATA FRAME IN THE VARIABLE")
 }
 
 search_functions<-function(string=str){grep(string,list_of_functions(),value=T)}
