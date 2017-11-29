@@ -13,8 +13,8 @@ library(data.table)
 #----initializations-------
 INDIA="Asia/Kolkata"
 dev <- T
-ubuntu <- T
-MAMP <-T 
+ubuntu <- F
+MAMP <-F 
 loaded_file <- parent.frame(2)$ofile
  if(dev) database_name="jupiter_dev" else database_name="jupiter"
     dbname<-database_name
@@ -439,7 +439,7 @@ seating<-function(refresh_hours=72){
 }
 
 room_efficiency<-function(summary=T) {
-        refresh("b$sessions100")->b$sessions100
+        refresh("b$sessions100")->>b$sessions100
         output<-rooms()[b$sessions100,{
         sess=class_session_id;
         date=date(starts_on);
@@ -746,7 +746,7 @@ replace_topic<-function(topic_id=stop("Topic_id cannot be null"),text=stop("Text
 }
 
 display_question<-function(question=NULL){
-    refresh("d$questions")->d$questions
+    refresh("d$questions")->>d$questions
     {d$questions %>% filter(question_id==question)}[,c(2,6)] ->question_title
     {d$questions %>% filter(question_id==question)}[,3] ->question_options
     print(question_title)

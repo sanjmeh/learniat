@@ -12,7 +12,7 @@ library(compareDF)
 
 this.file <- parent.frame(2)$ofile
 dev <- T
-ubuntu <- T
+ubuntu <- F
 if(ubuntu) 
     library(plumber)
 
@@ -422,6 +422,15 @@ RefreshJoinedStudents<-function(user=NULL,session=NULL){
   joined
 }
 
+#* @get /RefreshJoinedStudents_unboxed
+RefreshJoinedStudents_unboxed<-function(user=NULL,session=NULL){
+    joined<-data.frame(number=0,registered=nrow(students(session=session)))
+    x<-students(session=session) %>% count(user_state) %>% filter(user_state==10)
+    if(nrow(x)>0) joined$number <-x$n
+    log(api="RefreshJoinedStudents",user=user, parameters=paste("session:",session),returned_value=toJSON(joined))
+    list(joined)
+}
+
 
 #* @get /InsertScribbleFileName
 InsertScribbleFileName<-function(filename=NULL,user_id=0,image_type_id=5,uuid="BLANK"){
@@ -560,7 +569,7 @@ list_sessions<-function(teacher=NULL,userid=NULL,all_busy=F,only_vol=F,ans_quer=
                                       ][order(-class_session_id)] else
                                         if(ans_quer)
                                           outp<- lans[lquers,on="class_session_id",nomatch=0
-                                               ][sessions100,on="class_session_id",.(class_session_id,ends_on,class_id),nomatch=0
+                                               ][b$sessions100,on="class_session_id",.(class_session_id,ends_on,class_id),nomatch=0
                                                  ][d$classes,on="class_id",.(class_session_id,class_name,ends_on),nomatch=0
                                                    ][order(-class_session_id)] else
                                                    {
