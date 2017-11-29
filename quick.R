@@ -385,7 +385,7 @@ answers<-function(limit=20){
 start_classes<-function(number_rows=1,start_after=1,
                         duration=0.5, class_id=14,room_id=25,teacher_id=496,daily=F,gaps = 0.5){
     script_array<-gsinsert_class_sessions(number_rows,start_after,
-                                          duration, class_id,room_id,teacher_id,daily=F,gaps = 0.5)
+                                          duration, class_id,room_id,teacher_id,daily=daily,gaps = 0.5)
     for(i in seq_along(script_array)){
         runsql(script_array[i])
     }
@@ -521,7 +521,6 @@ gsinsert_class_sessions<-function(number_rows=1,start_after=1,
     }
     query_text<-"INSERT INTO class_sessions (class_id,room_id,teacher_id,starts_on,ends_on,session_state)"
     values<-sprintf("VALUES(%d,%d,%d,'%s','%s',%d)", class_id,room_id,teacher_id,value_start,value_end, 4)
-    browser()
     paste(query_text,values)
 }
 
