@@ -13,7 +13,7 @@ library(data.table)
 #----initializations-------
 INDIA="Asia/Kolkata"
 dev <- T
-ubuntu <- T
+ubuntu <- F
 MAMP <-F 
 loaded_file <- parent.frame(2)$ofile
  if(dev) database_name="jupiter_dev" else database_name="jupiter"
@@ -382,10 +382,13 @@ answers<-function(limit=20){
         # rename(class="class_name") %>% select(4:18)
 }
 
-start_classes<-function(class=14,t=496,starts=0.2,dur=1,number=3,gaps=0.25,room=20){
-    script_array<-gsinsert_class_sessions(class_id=class,teacher_id = t, gaps = gaps,number_rows = number,start_after = starts,duration = dur,room_id = room)
-    for(i in seq_along(script_array))
+start_classes<-function(number_rows=1,start_after=1,
+                        duration=0.5, class_id=14,room_id=25,teacher_id=496,daily=F,gaps = 0.5){
+    script_array<-gsinsert_class_sessions(number_rows,start_after,
+                                          duration, class_id,room_id,teacher_id,daily=F,gaps = 0.5)
+    for(i in seq_along(script_array)){
         runsql(script_array[i])
+    }
 }
 
 add_student<-function(class_id=NULL,students=NULL){
@@ -507,12 +510,18 @@ seat_info<-function(session=NULL){
 }
 
 gsinsert_class_sessions<-function(number_rows=1,start_after=1,
-                                   duration=0.5, gaps = 0.5,class_id=14,room_id=25,teacher_id=496){
+                                   duration=0.5, class_id=14,room_id=25,teacher_id=496,daily=F,gaps = 0.5){
+    if(daily){
+        value_start <- seq(from = now()+dhours(start_after),to =now()+dhours(start_after)+dhours(number_rows*24),by=dhours(24))
+        value_end <-  seq(from = now()+dhours(start_after)+dhours(duration),to =now()+dhours(start_after)+dhours(duration)+dhours(number_rows*24),by=dhours(24))
+    }
+    else{
+        value_start <- now()+dhours(seq(from=start_after,length.out = number_rows,by = duration+gaps))
+        value_end <- now()+dhours(seq(from=start_after+duration,length.out = number_rows,by = duration+gaps ))
+    }
     query_text<-"INSERT INTO class_sessions (class_id,room_id,teacher_id,starts_on,ends_on,session_state)"
-    values<-sprintf("VALUES(%d,%d,%d,'%s','%s',%d)",
-                    class_id,room_id,teacher_id,
-                    now()+dhours(seq(from=start_after,length.out = number_rows,by = duration+gaps)),
-                    now()+dhours(seq(from=start_after+duration,length.out = number_rows,by = duration+gaps )), 4)
+    values<-sprintf("VALUES(%d,%d,%d,'%s','%s',%d)", class_id,room_id,teacher_id,value_start,value_end, 4)
+    browser()
     paste(query_text,values)
 }
 
