@@ -13,7 +13,7 @@ library(data.table)
 #----initializations-------
 INDIA="Asia/Kolkata"
 dev <- T
-ubuntu <- F
+ubuntu <- T
 MAMP <-F 
 loaded_file <- parent.frame(2)$ofile
  if(dev) database_name="jupiter_dev" else database_name="jupiter"

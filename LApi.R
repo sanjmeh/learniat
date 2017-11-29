@@ -12,7 +12,7 @@ library(compareDF)
 
 this.file <- parent.frame(2)$ofile
 dev <- T
-ubuntu <- F
+ubuntu <- T
 if(ubuntu) 
     library(plumber)
 
@@ -108,7 +108,8 @@ UpdateMyState<-function(user=0,state=0){
           sql<-sqlInterpolate(ANSI(),script,x=state,y=user)
           rows_modified<-runsql(sql)
           if(rows_modified==0) message("State was not changed") else {
-              script2<-sprintf("INSERT INTO state_transitions (entity_type_id, entity_id, from_state, to_state,transition_time) VALUES (%d, %d, %d, %d, '%s')",1,user,old_state,state,now())
+              script2<-sprintf("INSERT INTO state_transitions (entity_type_id, entity_id, from_state, to_state,transition_time) VALUES (%d, %d, %d, %d, '%s')",
+                               1,as.numeric(user),as.numeric(old_state),as.numeric(state),now())
               rows_added<- runsql(script2)
           }
       } else {
@@ -523,7 +524,7 @@ SetModel<-function(userid=0,asses_id=0,model_flag=0){
         parameters = as.character(toJSON(data.frame(asses_id,model_flag),dataframe = 'rows')),
         returned_value = as.character(toJSON((status)))
     )
-    return(data.frame(Status=status))
+    return(list(Status=status))
 }
 
 
@@ -593,7 +594,7 @@ list_sessions<-function(teacher=NULL,userid=NULL,all_busy=F,only_vol=F,ans_quer=
 #* @serializer unboxedJSON
 session_det<-function(session_id=NULL,userid=NULL,hours=24){
 refresh("d$rooms",time_gap_hours=hours) ->>d$rooms
-outp<- sessions100 %>%
+outp<- b$sessions100 %>%
   filter(class_session_id==session_id) %>% 
   left_join(d$classes,by="class_id") %>% left_join(d$rooms,by="room_id") %>% 
   select(class_id,starts_on,ends_on,session_state,room_name,class_name)
