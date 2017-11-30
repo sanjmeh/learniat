@@ -83,7 +83,7 @@ ChangeSessionState<-function(userid=0,SessionId=0,NewState=0){
     n2=runsql(script2)
   } 
   if(NewState==5 && ending_time > now()){
-      script4<-sprintf("UPDATE class_sessions SET ends_on = '%s' WHERE class_session_id=%d LIMIT 1",now(),SessionId)
+      script4<-sprintf("UPDATE class_sessions SET ends_on = '%s' WHERE class_session_id=%d LIMIT 1",now(),as.numeric(SessionId))
       n4=runsql(script4)
   }
   
