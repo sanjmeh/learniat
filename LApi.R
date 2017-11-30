@@ -434,18 +434,16 @@ RefreshMyApp<-function(userid=0,uuid="BLANK"){
 
 #* @get /RefreshJoinedStudents
 RefreshJoinedStudents<-function(user=NULL,session=NULL){
-  joined<-data.frame(number=0,registered=nrow(students(session=session)))
-  x<-students(session=session) %>% count(user_state) %>% filter(user_state==10)
-  if(nrow(x)>0) joined$number <-x$n
-  log(api="RefreshJoinedStudents",user=user, parameters=paste("session:",session),returned_value=toJSON(joined))
-  joined
+        slist<- students(session=session,refresh = T)
+        joined<-data.table(number=slist[user_state==10,.N],registered=nrow(slist))
+        log(api="RefreshJoinedStudents",user=user, parameters=paste("session:",session),returned_value=toJSON(joined))
+        joined
 }
 
 #* @get /RefreshJoinedStudents_unboxed
 RefreshJoinedStudents_unboxed<-function(user=NULL,session=NULL){
-    joined<-data.frame(number=0,registered=nrow(students(session=session)))
-    x<-students(session=session) %>% count(user_state) %>% filter(user_state==10)
-    if(nrow(x)>0) joined$number <-x$n
+    slist<- students(session=session,refresh = T)
+    joined<-data.table(number=slist[user_state==10,.N],registered=nrow(slist))
     log(api="RefreshJoinedStudents",user=user, parameters=paste("session:",session),returned_value=toJSON(joined))
     list(joined)
 }
