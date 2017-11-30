@@ -944,7 +944,7 @@ if (nrow(new_topic_id)>1) return("you have two identical topic names, and may wa
 return(new_topic_id$topic_id)    
 }
 
-show_sessions<-function(user="ALL",class="ALL", days=1,limit=30,refresh_freq_min=1){
+show_sessions<-function(user="ALL",class="ALL", days=1,limit=30){
   India<-"Asia/Kolkata"
   state<-"NONE"
   if(all(user=="ALL",class=="ALL")) state="ALL" else
@@ -955,10 +955,10 @@ show_sessions<-function(user="ALL",class="ALL", days=1,limit=30,refresh_freq_min
               return("Invalid 'user'")
   }
   script<-switch(EXPR = state,
-                 "ALL"="SELECT * from class_sessions WHERE DATE(starts_on)> DATE_SUB(NOW(), INTERVAL ?da DAY) ORDER BY starts_on DESC LIMIT ?li",
-                 "TEACHER"="SELECT * from class_sessions WHERE teacher_id=?t AND DATE(starts_on)>DATE_SUB(NOW(), INTERVAL ?da DAY) ORDER BY starts_on DESC LIMIT ?li",
+                 "ALL"="SELECT * from class_sessions WHERE DATE(starts_on)> DATE_SUB(NOW(), INTERVAL ?da DAY) ORDER BY starts_on LIMIT ?li",
+                 "TEACHER"="SELECT * from class_sessions WHERE teacher_id=?t AND DATE(starts_on)>DATE_SUB(NOW(), INTERVAL ?da DAY) ORDER BY starts_on LIMIT ?li",
                  "STUDENT"="SELECT * from class_sessions WHERE DATE(starts_on)>DATE_SUB(NOW(), INTERVAL ?da DAY)",
-                 "CLASS"="SELECT * from class_sessions WHERE DATE(starts_on)>DATE_SUB(NOW(), INTERVAL ?da DAY) AND class_id =  ?ci ORDER BY starts_on DESC LIMIT ?li",
+                 "CLASS"="SELECT * from class_sessions WHERE DATE(starts_on)>DATE_SUB(NOW(), INTERVAL ?da DAY) AND class_id =  ?ci ORDER BY starts_on LIMIT ?li",
                  "ERROR"
   )
   if(state=="STUDENT") 

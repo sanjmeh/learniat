@@ -12,7 +12,7 @@ library(compareDF)
 
 this.file <- parent.frame(2)$ofile
 dev <- T
-ubuntu <- T
+ubuntu <- F
 if(ubuntu) 
     library(plumber)
 
@@ -343,6 +343,7 @@ GetMyTodaysSessions<-function(user=0,uuid="BLANK",refresh_minutes=10) {
 
 #* @get /RefreshMyApp
 RefreshMyApp<-function(userid=0,uuid="BLANK"){
+    d$tbl_auth <<- refresh("d$tbl_auth",time_gap_hours = 0.001)
   #remove_ended()
   INDIA="Asia/Kolkata"
   old_rooms<-data.frame()
@@ -350,15 +351,15 @@ RefreshMyApp<-function(userid=0,uuid="BLANK"){
   next_session<-F
   if(userid==0) return(error_message<-"Mandatory parameter UserId is missing") else
     # extract state from tbl_auth
-    user_state<-table_all("tbl_auth") %>% filter(user_id==userid) %>% select(user_state) %>% .[,1]
+    user_state<-d$tbl_auth %>% filter(user_id==userid) %>% select(user_state) %>% .[,1]
   MyUserState<-8
   if(NROW(user_state)==1) {
     MyUserState<-user_state
     suppressWarnings(show_sessions(user=userid)) %>%
-      select(1,5:6,7) -> session_list
-    time<-now(tzone=INDIA)
-    tz(session_list$starts_on)<-"Asia/Kolkata"
-    tz(session_list$ends_on)<-"Asia/Kolkata"
+      select(class_session_id,starts_on,ends_on,session_state) -> session_list
+    time<-now()
+    #tz(session_list$starts_on)<-"Asia/Kolkata"
+    #tz(session_list$ends_on)<-"Asia/Kolkata"
     m1<-time>session_list$starts_on
     m2<-time>session_list$ends_on
     m3<-xor(m1,m2)
