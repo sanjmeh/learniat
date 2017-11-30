@@ -14,7 +14,7 @@ library(data.table)
 INDIA="Asia/Kolkata"
 dev <- T
 ubuntu <- F
-MAMP <-T
+MAMP <-F
 loaded_file <- parent.frame(2)$ofile
  if(dev) database_name="jupiter_dev" else database_name="jupiter"
     dbname<-database_name
@@ -576,10 +576,12 @@ students2<-function(class_id=NULL,session=NULL){ # delete this once everything i
     } else "Incorrect input"
 }
 
-students<-function(class_id=NULL,session=NULL,refresh=F){ #this is new code and is used in 
+students<-function(class_id=NULL,session=NULL,refresh=F){
     cl_id<-class_id
-    if(!is.null(class_id)) 
-        outp<- d$tbl_auth[d$student_class_map[class_id==cl_id],.(student_id,first_name,last_name,grade_id,user_state),on=.(user_id=student_id)] else
+    if(!is.null(class_id)) {
+        if(refresh) refresh("d$tbl_auth",time_gap_hours = 0) ->> d$tbl_auth
+         outp<- d$tbl_auth[d$student_class_map[class_id==cl_id],.(student_id,first_name,last_name,grade_id,user_state),on=.(user_id=student_id)] 
+        }else
             if(!is.null(session)) {
                 outp<- students(classid(session_id=session,recent = 0.1),refresh = refresh)
             } else "Incorrect input"
