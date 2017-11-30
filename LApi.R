@@ -111,7 +111,7 @@ ChangeSessionState<-function(userid=0,SessionId=0,NewState=0){
 UpdateMyState<-function(user=0,state=0){
   INDIA="Asia/Kolkata"
   if(!is.null(user) && !(is.null(state))){
-      outp<-data.table(user_id=user,user_state=state,warning="")
+      outp<-data.table(user_id=as.numeric(user),user_state=as.numeric(state),warning="")
       #user_record <- user_status(user) # this will ensure we query the SQL table only once
       snapshot<-RefreshMyApp(userid = user)
       old_state<-snapshot$Summary$MyState
