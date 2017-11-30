@@ -12,7 +12,7 @@ library(compareDF)
 
 this.file <- parent.frame(2)$ofile
 dev <- T
-ubuntu <- F
+ubuntu <- T
 if(ubuntu) 
     library(plumber)
 
@@ -111,25 +111,34 @@ ChangeSessionState<-function(userid=0,SessionId=0,NewState=0){
 UpdateMyState<-function(user=0,state=0){
   INDIA="Asia/Kolkata"
   if(!is.null(user) && !(is.null(state))){
-      user_record <- user_status(user) # this will ensure we query the SQL table only once
-      old_state<-user_record$user_state 
-      if(state!=user_record$user_state) {
-          user_record$user_state<-state
-          script<-"UPDATE tbl_auth SET user_state = ?x where user_id=?y LIMIT 1"
-          sql<-sqlInterpolate(ANSI(),script,x=state,y=user)
-          rows_modified<-runsql(sql)
-          if(rows_modified==0) message("State was not changed") else {
-              script2<-sprintf("INSERT INTO state_transitions (entity_type_id, entity_id, from_state, to_state,transition_time) VALUES (%d, %d, %d, %d, '%s')",
-                               1,as.numeric(user),as.numeric(old_state),as.numeric(state),now())
-              rows_added<- runsql(script2)
-          }
+      outp<-data.table(user_id=user,user_state=state,warning="")
+      #user_record <- user_status(user) # this will ensure we query the SQL table only once
+      snapshot<-RefreshMyApp(userid = user)
+      old_state<-snapshot$Summary$MyState
+      if(state %in% c(1,11) && snapshot$Summary$CurrentSessionState != 1) {
+          outp$warning <-paste("rejecting update to state",state,"because current session is not live(",snapshot$Summary$CurrentSessionState,")")
+          message( outp$warning) 
+          outp$user_state<-old_state
+          } else 
+          if(state!=old_state) {
+              #user_record$user_state<-state
+              script<-"UPDATE tbl_auth SET user_state = ?x where user_id=?y LIMIT 1"
+              sql<-sqlInterpolate(ANSI(),script,x=state,y=user)
+              rows_modified<-runsql(sql)
+              if(rows_modified>0) {
+                  script2<-sprintf("INSERT INTO state_transitions (entity_type_id, entity_id, from_state, to_state,transition_time) VALUES (%d, %d, %d, %d, '%s')",
+                                   1,as.numeric(user),as.numeric(old_state),as.numeric(state),now())
+                  rows_added<- runsql(script2)
+              } else {
+                  outp$warning <-paste("No Update happened despite a different state for new state:",state, "and old state:",snapshot$Summary$MyState)
+                  message(paste("Warning:",outp$warning))
+              }
       } else {
           rows_modified<-0
-          user_record$warning <-"No Update happened"
-          message("State was not changed")
+          outp$warning <-paste("No Update happened as old state was already:",state)
+          message(paste("Warning:",outp$warning))
       }
-        outp<- user_record      
-  } else outp<- data.table(Error="Need two parameters to this API, user and state")
+  } else outp <- data.table(Error="Need two parameters to this API, user and state")
 log(api="UpdateMyState",user=user, parameters= paste0("state:",state),returned_value= toJSON(outp))
 outp
 }

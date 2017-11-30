@@ -1051,7 +1051,7 @@ runsql<-function(sql_text=stop("Please provide an SQL script starting with INSER
                   host=host_address,port=port)  # connect the DB
     on.exit(dbDisconnect(db))
     rows_affected<-dbExecute(db,sql_text)
-    cat(paste("\nExecuted successfully for rows:",rows_affected,"\nScript:",sql_text))
+    cat(paste("\nExecuted successfully for rows:",rows_affected,"\nScript:",sql_text,"\n"))
     rows_affected
     }
 
