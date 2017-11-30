@@ -111,7 +111,7 @@ ChangeSessionState<-function(userid=0,SessionId=0,NewState=0){
 UpdateMyState<-function(user=0,state=0){
   INDIA="Asia/Kolkata"
   if(!is.null(user) && !(is.null(state))){
-      outp<-data.table(user_id=as.numeric(user),user_state=as.numeric(state),warning="")
+      outp<-data.table(user_id=as.numeric(user),user_state=as.numeric(state),isupdated=0,warning="")
       #user_record <- user_status(user) # this will ensure we query the SQL table only once
       snapshot<-RefreshMyApp(userid = user)
       old_state<-snapshot$Summary$MyState
@@ -126,9 +126,10 @@ UpdateMyState<-function(user=0,state=0){
               sql<-sqlInterpolate(ANSI(),script,x=state,y=user)
               rows_modified<-runsql(sql)
               if(rows_modified>0) {
+                  outp$isupdated <- 1
                   script2<-sprintf("INSERT INTO state_transitions (entity_type_id, entity_id, from_state, to_state,transition_time) VALUES (%d, %d, %d, %d, '%s')",
                                    1,as.numeric(user),as.numeric(old_state),as.numeric(state),now())
-                  rows_added<- runsql(script2)
+                  runsql(script2)
               } else {
                   outp$warning <-paste("No Update happened despite a different state for new state:",state, "and old state:",snapshot$Summary$MyState)
                   message(paste("Warning:",outp$warning))
