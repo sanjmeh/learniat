@@ -111,9 +111,10 @@ ChangeSessionState<-function(userid=0,SessionId=0,NewState=0){
 UpdateMyState<-function(user=0,state=0){
   INDIA="Asia/Kolkata"
   if(!is.null(user) && !(is.null(state))){
-      old_state<-user_status(user)$user_state
-      if(state!=old_state) {
-          new_state<-state
+      user_record <- user_status(user) # this will ensure we query the SQL table only once
+      old_state<-user_record$user_state 
+      if(state!=user_record$user_state) {
+          user_record$user_state<-state
           script<-"UPDATE tbl_auth SET user_state = ?x where user_id=?y LIMIT 1"
           sql<-sqlInterpolate(ANSI(),script,x=state,y=user)
           rows_modified<-runsql(sql)
@@ -124,13 +125,10 @@ UpdateMyState<-function(user=0,state=0){
           }
       } else {
           rows_modified<-0
-          user_record <- user_status(user)
           user_record$warning <-"No Update happened"
-          outp<- user_record
           message("State was not changed")
       }
-      if (rows_modified==1) 
-          outp<- user_status(user)
+        outp<- user_record      
   } else outp<- data.table(Error="Need two parameters to this API, user and state")
 log(api="UpdateMyState",user=user, parameters= paste0("state:",state),returned_value= toJSON(outp))
 outp
