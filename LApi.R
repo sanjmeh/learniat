@@ -52,7 +52,7 @@ GetAllStudentStates<-function(SessionId=0,userid=0){
 }
 
 #* @get /ChangeSessionState
-ChangeSessionState<-function(userid=0,SessionId=0,NewState=NA){
+ChangeSessionState<-function(userid=0,SessionId=0,NewState=0){
   output_df<-data.frame(OldState=integer(1),NewState=integer(1),Status=character(1))
   INDIA="Asia/Kolkata"
   if(!valid_user(userid) || SessionId==0)
@@ -60,9 +60,14 @@ ChangeSessionState<-function(userid=0,SessionId=0,NewState=NA){
     output_df$Status<-"ERROR: Valid user_id and SessionId mandatory inputs"
     return(output_df)
   } else
-    script1<-paste("SELECT session_state FROM class_sessions WHERE class_session_id=",SessionId)
-  old_state<-querysql(script1)[,1]
-  if (NROW(old_state)==0)
+    script1<-paste("SELECT * FROM class_sessions WHERE class_session_id=",SessionId)
+  
+  sess_record<-querysql(script1)
+  old_state<-sess_record$session_state
+  starting_time<-sess_record$starts_on
+  ending_time <- sess_record$ends_on
+  
+    if (NROW(old_state)==0)
   {
     output_df$Status<-"ERROR: This SessionId was not found"
     return(output_df)
@@ -70,25 +75,30 @@ ChangeSessionState<-function(userid=0,SessionId=0,NewState=NA){
   {
     output_df$SessionId=SessionId
     output_df$OldState=old_state
-    if(!old_state %in% c(1:6)) output_df$Status<-"Warning: Invalid Sessionid found in DB"
+    if(!old_state %in% c(1:6)) output_df$Status<-"Warning: Invalid Session state found in DB"
   }
   if(NewState>0) {
     script2<-"UPDATE class_sessions SET session_state = ?state WHERE class_session_id=?id LIMIT 1"
     script2<-sqlInterpolate(ANSI(),script2,state=NewState,id=SessionId)
     n2=runsql(script2)
-  } else
-  {
-    output_df$Status<-"Error: Invalid Sessionid passed. SessionId has to be numeric"
-    return(output_df)
+  } 
+  if(NewState==5 && ending_time > now()){
+      script4<-sprintf("UPDATE class_sessions SET ends_on = '%s' WHERE class_session_id=%d LIMIT 1",now(),SessionId)
+      n4=runsql(script4)
   }
   
-  if(!is.null(n2) && n2==1) {
+  if(exists("n2") && n2==1) {
     output_df$NewState<-NewState
     script3<-"INSERT INTO state_transitions (entity_type_id,  entity_id, from_state,  to_state, transition_time) VALUES (2, ?eid, ?f,?t,?tm)"
     script3<-sqlInterpolate(ANSI(),script3, eid=SessionId, f=old_state,t=NewState,tm=as.character(now(tzone = INDIA)))
     n3<-runsql(script3)
     output_df$Status="Success"
   } else output_df$Warning<-"There were no changes made in DB"
+  
+  if(exists("n4") && n4==1) {
+      message("End Time of session has been adjusted upwards")
+  }
+  
   log(api="ChangeSessionState",
       user = userid,
       parameters = paste0("SessionId:",SessionId,",","NewState:",NewState),

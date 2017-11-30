@@ -14,7 +14,7 @@ library(data.table)
 INDIA="Asia/Kolkata"
 dev <- T
 ubuntu <- F
-MAMP <-F 
+MAMP <-T 
 loaded_file <- parent.frame(2)$ofile
  if(dev) database_name="jupiter_dev" else database_name="jupiter"
     dbname<-database_name
@@ -818,8 +818,8 @@ list_users<-function(school="ALL",refresh=F) {
         "INVALID school_id"
 }
 
-state_transitions<-function(time_gap=1){
-    refresh("b$st_tr100",time_gap_hours = time_gap)->>b$st_tr100
+state_transitions<-function(time_gap_minutes=1){
+    refresh("b$st_tr100",time_gap = time_gap_minutes/60)->>b$st_tr100
     cat("\n")
     b$st_tr100[order(-id)]
 }
