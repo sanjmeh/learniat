@@ -115,7 +115,7 @@ UpdateMyState<-function(user=0,state=0){
       #user_record <- user_status(user) # this will ensure we query the SQL table only once
       snapshot<-RefreshMyApp(userid = user)
       old_state<-snapshot$Summary$MyState
-      if(state %in% c(1,11) && snapshot$Summary$CurrentSessionState != 1) {
+      if(state %in% c(1,11) && (is.na(snapshot$Summary$CurrentSessionState) ||  snapshot$Summary$CurrentSessionState != 1)) {
           outp$warning <-paste("rejecting update to state",state,"because current session is not live(",snapshot$Summary$CurrentSessionState,")")
           message( outp$warning) 
           outp$user_state<-old_state
