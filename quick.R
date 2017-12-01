@@ -11,11 +11,11 @@ library(RCurl)
 library(data.table)
 
 #----initializations-------
+loaded_file <- parent.frame(2)$ofile
 INDIA="Asia/Kolkata"
 dev <- T
-ubuntu <- F
+if(str_detect(loaded_file,"Dropbox")) ubuntu<-F else ununtu <-T
 MAMP <-F
-loaded_file <- parent.frame(2)$ofile
  if(dev) database_name="jupiter_dev" else database_name="jupiter"
     dbname<-database_name
  

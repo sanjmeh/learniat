@@ -11,8 +11,8 @@ library(jsonlite)
 library(compareDF)
 
 this.file <- parent.frame(2)$ofile
+if(str_detect(this.file,"Dropbox")) ubuntu<-F else ununtu <-T
 dev <- T
-ubuntu <- F
 if(ubuntu) 
     library(plumber)
 
