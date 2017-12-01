@@ -45,7 +45,7 @@ querysql<-function(sql_text=NULL,database=database_name){
     db<-DBI::dbConnect(RMySQL::MySQL(),user=db_user_name,password=db_password,dbname=database,
                        host=host_address,port=port)  # connect the DB
     on.exit(dbDisconnect(db))
-    dbGetQuery(db,sql_text)
+    as.data.table(dbGetQuery(db,sql_text))
 }
 
 show_tbl_status<-function(dbname=database_name){
@@ -57,6 +57,18 @@ show_tbl_status<-function(dbname=database_name){
 update_time <- function(df){
     attr(df,"last_upd") <- now()
     return(as.data.table(df))
+}
+
+reloadDB<- function(which=NULL){ 
+    if(which=="big"){
+        message(paste("ALERT: reloading big15 tables from:",ifelse(MAMP,"LOCAL MAC DB","AWS DB")))
+        b <<- setNames(rep(data.table(1),15),short_names)
+        b <<- lapply(X=paste0("b$",short_names),FUN=refresh)
+        marker_d <<- d$tbl_auth$latitude[1]
+    } else if(which=="small") {
+        message(paste("ALERT: reloading small tables from:",ifelse(MAMP,"LOCAL MAC DB","AWS DB")))
+        load_dbtables(); 
+        marker_b <<- b$ques_log$active_question[1]}
 }
 
 refresh<-function(variable_name=NULL,time_gap_hours=24,history=100){
@@ -121,6 +133,15 @@ refresh<-function(variable_name=NULL,time_gap_hours=24,history=100){
     }
 }
 
+load_dbtables<-function() {  
+    db<-dbConnect(MySQL(),user=db_user_name,password=db_password,dbname=database_name,
+                  host=host_address,port=port)  # connect the DB at Amazon
+    d <<- setNames(lapply(smalltables, function(t) {cat("^"); suppressWarnings(dbReadTable(db, t))}), smalltables) #load all small DB tables with variable names set as the MySQL table names. 
+    d <<- lapply(d,update_time)
+    cat("\n")
+    dbDisconnect(db)  
+}
+
 refresh("alltables",time_gap_hours = 240)->alltables
 
 #alltables %>% top_n(15,Data_length) %>% .$Name %>% sort() -> big15
@@ -136,31 +157,27 @@ names(big15)<-short_names
 alltables %>% .$Name -> tabs
 smalltables<-setdiff(tabs,big15)
 
-if((exists("b") && length(b)!=15) || !exists("b")){
-    message("ALERT: big15 tables are not downloaded in variable b. Downloading the 15 tables from MySQL on AWS to variable b")
-    b<- lapply(X=paste0("b$",short_names),FUN=refresh)
-    names(b)<-short_names
+if(exists("b") && ubuntu && object.size(b)<1000000) reloadDB(which = "big")
+if(exists("d") && ubuntu && object.size(d)<250000) reloadDB(which = "small")
+
+
+if(exists("b") && !ubuntu && is.list(b) && length(b)==15){
+    if(length(b$ques_log)==9) marker_b <- b$ques_log$active_question[1] else {
+                            b$ques_log <- refresh("b$ques_log")
+                            message("Warning: big15 may not be refreshed. Check other than b$ques_log tables")
+    }
+    if (marker_b == 99 & ! MAMP  || marker_b !=99 & MAMP) reloadDB(which="big")   
 }
 
-load_dbtables<-function() {  
-  db<-dbConnect(MySQL(),user=db_user_name,password=db_password,dbname=database_name,
-                host=host_address,port=port)  # connect the DB at Amazon
-  d <- setNames(lapply(smalltables, function(t) {cat("^"); suppressWarnings(dbReadTable(db, t))}), smalltables) #load all small DB tables with variable names set as the MySQL table names. 
-  d <<- lapply(d,update_time)
-  cat("\n")
-  dbDisconnect(db)  
-} 
+if(exists("d") && !ubuntu && is.list(d)) {
+    if(length(d$tbl_auth)==18) marker_d <- d$tbl_auth$latitude[1]
+    if (marker_d == 99 & ! MAMP  || marker_d !=99 & MAMP) 
+        reloadDB(which="small")
+}
 
+if(!exists("b")) reloadDB(which = "big")
+if(!exists("d")) reloadDB(which = "small")
 
-
-if(exists("d") && is.null(attr(d$tbl_auth,which = "last_upd")))  loaddata_aws() else 
-    if( !exists("d") )  {
-        d<-list()
-        loaddata_aws()
-    }
-if(!exists("b")) b<-list()
-b<-setNames(lapply(paste0("b$",short_names),refresh),short_names)
-        
 
 
 table_names<-function(search=NULL){
