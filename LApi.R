@@ -361,7 +361,7 @@ GetMyTodaysSessions<-function(user=0,uuid="BLANK",refresh_minutes=10) {
 
 #* @get /RefreshMyApp
 RefreshMyApp<-function(userid=0,uuid="BLANK"){
-    d$tbl_auth <<- refresh("d$tbl_auth",time_gap_hours = 0.001)
+    d$tbl_auth <<- refresh("d$tbl_auth",time_gap_hours = 0)
   #remove_ended()
   INDIA="Asia/Kolkata"
   old_rooms<-data.frame()

@@ -34,11 +34,11 @@ MAMP <-F
      WROOT <- "/Applications/MAMP/db/mysql57"
      MYSQL_LOG <- ifelse( MAMP, "Kids-BR-iMac.log", "mysql.log")
  }
- 
-monitored_users<-496:505
-India<-"Asia/Kolkata"
-
-load(dbaccessfile)
+    
+    marker_b<-NULL
+    marker_d<-NULL
+    monitored_users<-496:505
+    load(dbaccessfile)
 #---main functions------
     
 querysql<-function(sql_text=NULL,database=database_name){
@@ -62,13 +62,17 @@ update_time <- function(df){
 reloadDB<- function(which=NULL){ 
     if(which=="big"){
         message(paste("ALERT: reloading big15 tables from:",ifelse(MAMP,"LOCAL MAC DB","AWS DB")))
-        b <<- setNames(rep(data.table(1),15),short_names)
-        b <<- lapply(X=paste0("b$",short_names),FUN=refresh)
-        marker_d <<- d$tbl_auth$latitude[1]
+        b <<- lapply(X=paste0("b$",short_names),FUN=refresh,time_gap_hours=0)
+        names(b)<<- short_names
+        marker_b <<- b$elog[1]$text
+        val<-countbig()
     } else if(which=="small") {
         message(paste("ALERT: reloading small tables from:",ifelse(MAMP,"LOCAL MAC DB","AWS DB")))
         load_dbtables(); 
-        marker_b <<- b$ques_log$active_question[1]}
+        marker_d <<- d$tbl_auth$latitude[1]
+        val<-countsmall()
+    }
+    val
 }
 
 refresh<-function(variable_name=NULL,time_gap_hours=24,history=100){
@@ -83,7 +87,7 @@ refresh<-function(variable_name=NULL,time_gap_hours=24,history=100){
                            "b$ans_opt"=suppressWarnings(querysql(sprintf("select * from answer_options where updated_on> DATE_SUB(NOW(),INTERVAL %d DAY) ",history))),
                            "b$assesm"=suppressWarnings(querysql(sprintf("select * from assessment_answers where last_updated> DATE_SUB(NOW(),INTERVAL %d DAY) ",history))),
                            "b$sessions100"=suppressWarnings(querysql(sprintf("SELECT * FROM class_sessions where starts_on >DATE_SUB(NOW(),INTERVAL %d DAY) ",history))),
-                           "b$elog"=data.frame(text="elog is not downloaded"),
+                           "b$elog"=data.table(text=ifelse(MAMP,"MAMP", "AWS elog is not downloaded")),
                            "b$qvarchive"=data.frame(text="qvarchive is not downloaded"),
                            "b$ques_log"=suppressWarnings(querysql(sprintf("select * from question_log where start_time> DATE_SUB(NOW(),INTERVAL %d DAY) ",history))),
                            "b$qopt"=suppressWarnings(querysql(sprintf("select * from question_options"))),
@@ -160,13 +164,25 @@ smalltables<-setdiff(tabs,big15)
 if(exists("b") && ubuntu && object.size(b)<1000000) reloadDB(which = "big")
 if(exists("d") && ubuntu && object.size(d)<250000) reloadDB(which = "small")
 
+new_counter <- function() {
+    i <- 0
+    function() {
+        # do something useful, then ...
+        i <<- i + 1
+        i
+    }
+}
+
+countbig <- new_counter()
+countsmall <- new_counter()
 
 if(exists("b") && !ubuntu && is.list(b) && length(b)==15){
-    if(length(b$ques_log)==9) marker_b <- b$ques_log$active_question[1] else {
-                            b$ques_log <- refresh("b$ques_log")
-                            message("Warning: big15 may not be refreshed. Check other than b$ques_log tables")
+    if(length(names(b))!=15) names(b)<-short_names
+    if(length(b$elog)==1) marker_b <- b$elog[1]$text else {
+        reloadDB(which = "big")
+        marker_b <- b$elog[1]$text
     }
-    if (marker_b == 99 & ! MAMP  || marker_b !=99 & MAMP) reloadDB(which="big")   
+    if (grepl(marker_b,"MAMP") & ! MAMP  || !grepl(marker_b,"MAMP") & MAMP) reloadDB(which="big")
 }
 
 if(exists("d") && !ubuntu && is.list(d)) {
@@ -852,8 +868,8 @@ delete_log<-function(time=NULL){
 password_mismatches<-function() {
     xmpp_users<-list_XMPP_users()
     users<-list_users()
-    merge(xmpp_users,users,all=TRUE,by.x="username",by.y="user_id") %>% filter(!password.x==password.y) %>%
-        select(5,1:2,6,3:4,7)
+    users$user_id <- as.character(users$user_id)
+    xmpp_users[users,on=.(username=user_id)][password!=i.password]
 }
 
 password_sync<-function() {
@@ -964,7 +980,6 @@ return(new_topic_id$topic_id)
 }
 
 show_sessions<-function(user="ALL",class="ALL", days=1,limit=30){
-  India<-"Asia/Kolkata"
   state<-"NONE"
   if(all(user=="ALL",class=="ALL")) state="ALL" else
   { r<-role(user); 
@@ -994,8 +1009,8 @@ show_sessions<-function(user="ALL",class="ALL", days=1,limit=30){
   
   if(!state =="ERROR"){
     x<-querysql(script)
-     x$starts_on %<>% ymd_hms(tz = India)
-     x$ends_on %<>% ymd_hms(tz=India)
+     x$starts_on %<>% ymd_hms(tz = INDIA)
+     x$ends_on %<>% ymd_hms(tz=INDIA)
   } 
   if(state=="STUDENT") {
     x %<>% filter(class_id %in% classes(user = user,detail=F))
@@ -1084,7 +1099,6 @@ writedbtable<-function(df=NULL,tablename=NULL,database=database_name,overwrite_f
 }
 
 log<-function(api="DUMMY",user=0,parameters="DUMMY",returned_value="NOT YET IMPL"){
-    INDIA="Asia/Kolkata"
     #api<-deparse(sys.calls()[[sys.nframe()-1]]) - this line does not work
     write.table(data.frame(time=now(tzone=INDIA),API=api,user_id=user,Parameters=parameters,contents=as.character(returned_value)),quote=F,file=file.path(WROOT,JSON_LOG),row.names=F, col.names=F, append=T,sep=";")
 }
