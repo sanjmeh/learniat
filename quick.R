@@ -26,6 +26,7 @@ MAMP <-F
      ROOT<- "/var/www/logs"
      JSON_LOG<-"api.logs.txt"
      MYSQL_LOG <- "mysql.log"
+     url_images <-  "http://54.251.104.13/images"
  } else {
      setwd("~/Dropbox/R-wd")
      dbaccessfile<- ifelse( MAMP,"localdbaccess", "remotedbaccess")
@@ -33,6 +34,7 @@ MAMP <-F
      ROOT <- ifelse( MAMP,"/Applications/MAMP/db/mysql57", "http://54.251.104.13/logs")
      WROOT <- "/Applications/MAMP/db/mysql57"
      MYSQL_LOG <- ifelse( MAMP, "Kids-BR-iMac.log", "mysql.log")
+     url_images <-  "http://54.251.104.13/images"
  }
     
     marker_b<-NULL
@@ -75,7 +77,7 @@ reloadDB<- function(which=NULL){
     val
 }
 
-refresh<-function(variable_name=NULL,time_gap_hours=24,history=100){
+refresh<-function(variable_name=NULL,time_gap_hours=24,history=100,transition_history=30){
     if(grepl("$",variable_name,fixed = T)){
         expr<-paste("attr(",variable_name,",which='last_upd'",")")
         condition<- is.null(eval(parse(text = variable_name))) || is.null(eval(parse(text=expr))) || time_length(now()-eval(parse(text=expr)),unit="hour") > time_gap_hours
@@ -92,7 +94,7 @@ refresh<-function(variable_name=NULL,time_gap_hours=24,history=100){
                            "b$ques_log"=suppressWarnings(querysql(sprintf("select * from question_log where start_time> DATE_SUB(NOW(),INTERVAL %d DAY) ",history))),
                            "b$qopt"=suppressWarnings(querysql(sprintf("select * from question_options"))),
                            
-                           "b$st_tr100"= suppressWarnings(querysql(sprintf("SELECT * FROM state_transitions where transition_time>DATE_SUB(NOW(),INTERVAL %d DAY) ",history-90))),
+                           "b$st_tr100"= suppressWarnings(querysql(sprintf("SELECT * FROM state_transitions where transition_time>DATE_SUB(NOW(),INTERVAL %d DAY) ",transition_history))),
                            "b$ss_time"=suppressWarnings(querysql(sprintf("select * from stud_session_time where last_seen> DATE_SUB(NOW(),INTERVAL %d DAY) ",history))),
                            "b$stt"=suppressWarnings(querysql(sprintf("select * from stud_topic_time where last_seen> DATE_SUB(NOW(),INTERVAL %d DAY) ",history))),
                            "b$sindx"=suppressWarnings(querysql(sprintf("select * from student_index where last_updated> DATE_SUB(NOW(),INTERVAL %d DAY) ",history))),
@@ -100,7 +102,7 @@ refresh<-function(variable_name=NULL,time_gap_hours=24,history=100){
                            "b$sqarchive"=data.frame(text="sqarchive is not downloaded"),
                            "b$suggo"=suppressWarnings(querysql(sprintf("select * from suggestion_options where last_updated> DATE_SUB(NOW(),INTERVAL %d DAY) ",history))),
                            "b$topic_log"=suppressWarnings(querysql(sprintf("select * from topic_log where transition_time> DATE_SUB(NOW(),INTERVAL %d DAY) ",history))),
-                           "b$images"=suppressWarnings(querysql(sprintf("select * from uploaded_images where DateUploaded> DATE_SUB(NOW(),INTERVAL %d DAY) ",history))),
+                           "b$images"=suppressWarnings(querysql(sprintf("select * from uploaded_images where DateUploaded> DATE_SUB(NOW(),INTERVAL %d DAY) ",1000))),
                            
                            "alltables"=show_tbl_status(),
                            "jsonlog"=json_logs(),
@@ -191,8 +193,8 @@ if(exists("d") && !ubuntu && is.list(d)) {
         reloadDB(which="small")
 }
 
-if(!exists("b")) reloadDB(which = "big")
-if(!exists("d")) reloadDB(which = "small")
+if(!exists("b")) {b <- list(); reloadDB(which = "big")}
+if(!exists("d")) {d <- list(); reloadDB(which = "small")}
 
 
 
@@ -215,24 +217,31 @@ list_of_functions<-function(){
     sort(listfns)
 }
 
-display_image<-function(qid=NULL, baseurl='http://54.251.104.13/images/uploads_webapp/'){
+display_image<-function(qid=NULL){
     if(!is.null(qid)){
+        image_leaf=b$images[image_id==d$questions[question_id==qid,scribble_id]]$image_path
+        url_image=file.path(url_images,image_leaf)
         plot(x = c(0,1200),y=c(0,800))
-        pic_url<-paste0(baseurl,"q-",qid,".png")
-        content<-getURLContent(pic_url)
+        content<-getURLContent(url_image)
         png_obj<-readPNG(content,info = T)
         rasterImage(png_obj,0,0,1024,768)
     }
     
 }
 
-display_ipad_image<-function(ass_ansid=NULL,image_path=NULL, baseurl='http://54.251.104.13/images/'){
+# this function has to be fine tuned in line with the new path management
+display_ipad_image<-function(ass_ansid=NULL,image_file=NULL, baseurl='http://54.251.104.13/images',recency_minutes=10){
+    refresh("b$assesm",time_gap_hours = recency_minutes/60) ->> b$assesm
+    refresh("b$images",time_gap_hours = recency_minutes/60) ->> b$images
+    
+    dt1<-b$assesm[b$images,.(date=DateUploaded,assessment_answer_id,student_id,question_log_id,class_session_id,image_path),on=.(teacher_scribble_id=image_id),nomatch=0]
+    
     if(is.null(ass_ansid)){
-        pic_url<-paste0(baseurl,image_path)
+        pic_url<-file.path(baseurl,image_file)
     } else 
     {
-        image_path<-querysql(paste0("select image_path from uploaded_images where image_id=(select scribble_id from answer_options where assessment_answer_id=",ass_ansid,")"))
-        pic_url<-paste0(baseurl,image_path)
+        image_file<-image_file <- dt1[assessment_answer_id==ass_ansid,image_path]
+        pic_url<-file.path(baseurl,image_file)
     }   
     content<-getURLContent(pic_url)
     png_obj<-readPNG(content,info = T)
@@ -385,35 +394,31 @@ recent_topic_logs<-function(recency=1){
 topic_log %>% arrange(desc(Auto_id)) %>% as.data.table()
 }
 
-answers<-function(limit=20){
-    suppressWarnings(querysql(paste("SELECT * FROM question_log ORDER BY question_log_id DESC LIMIT", limit))) ->qlog
-       suppressWarnings(querysql(paste("SELECT * FROM assessment_answers ORDER BY assessment_answer_id DESC LIMIT",limit*10))) ->ans_log
-       suppressWarnings(querysql(paste("SELECT * FROM answer_options ORDER BY assessment_answer_id DESC LIMIT",limit*40))) ->ans_option_log
-       suppressWarnings(querysql(paste("SELECT * FROM student_index ORDER BY class_session_id DESC LIMIT",limit*5))) ->index
-
-
-       ans_option_log %>%
-         merge(ans_log) %>%
-         group_by(assessment_answer_id,question_log_id,student_id) %>%
-         summarise(options=n()) %>%
-         merge(qlog) %>%
-         merge(table_all("tbl_auth"),by.x = "student_id",by.y="user_id") %>%
-         select(student_id:start_time,answer_count:first_name) %>%
-         merge(d$questions) %>%
-         select(-last_updated,-classification) %>%
-         merge(d$topic) %>% head(20)
-         # select(-(topic_info:pi)) %>%
-         # merge (subjects) %>%
-         # merge(classes) %>%
-         # select(1:12)
-
-           #select(1,"first_name",2:7) %>%
-        # merge(table_all("class_sessions")) %>%
-        # mutate(period_minutes=format(time_length(interval(starts_on,ends_on),unit="minute"),digits = 0)) %>%
-        # select(-(ends_on:pi),-room_id) %>%
-        # merge(table_all("classes")) %>%
-        # rename(class="class_name") %>% select(4:18)
+recent_ques<-function(minutes=1){
+    refresh("b$ques_log",time_gap_hours = minutes/60)->>b$ques_log
+    b$ques_log[d$questions,.(question_id,question_name,type=question_type_id,datetime=start_time,teacher_id),on="question_id"][order(-datetime)] %>% head(20)
 }
+
+ques_usage<-function(){
+  b$ques_log[,{
+    tot=.N
+    ques_type=d$questions[question_id==.BY[[1]],question_type_id]
+    .(type=ques_type,total=tot)
+  },by="question_id"]
+}
+
+ans<-function(){
+  b$ques_log[b$assesm,
+           .(qid=question_id,qlog=question_log_id,ass=assessment_answer_id,stud=student_id,score=percent(answer_score,2),mod=model_answer,sess=class_session_id),
+           on="question_log_id"
+           ]
+}
+
+ans2<-function(){
+  ans()[ques(),on=.(qid),nomatch=0]
+}
+
+
 
 start_classes<-function(number_rows=1,start_after=1,
                         duration=0.5, class_id=14,room_id=25,teacher_id=496,daily=F,gaps = 0.5){
@@ -568,14 +573,22 @@ shift_session<-function(session=NULL,min=5,what="both"){
   }else return("This session is either missing today or not in 4,2 or 1 state")
 }
 
-auto_cancel<-function(days=1){
-  srows<-show_sessions(days = days) %>% filter(session_state<5 & ends_on <now())
-  stud_dflist<-lapply(X = srows$class_id,FUN = students) 
-  all_students<-Reduce(bind_rows,stud_dflist) %>% filter(user_state %in% c(1,9,10))
-  s1<-sprintf("update class_sessions set session_state=5 where class_session_id=%d ",srows$class_session_id)
-  s2<-sprintf("delete from live_session_status where session_id = %d",srows$class_session_id)
-  s3<-sprintf("update tbl_auth set  user_state = 7 where user_id = %d",all_students$student_id)
-  runsql(s1);runsql(s2);runsql(s3)
+auto_cancel<-function(days_old=1,recent=1){
+    refresh("d$tbl_auth",time_gap_hours = recent) ->> d$tbl_auth
+  sess1<-show_sessions(days = days_old) %>% filter(session_state %in% c(1,2) & ends_on <now())
+  sess4<-show_sessions(days = days_old) %>% filter(session_state ==4 & ends_on <now())
+  #stud_dflist<-lapply(X = sess1$class_id,FUN = students)
+  #teach_vector<- bind_rows(sess1,sess4) %>% select(teacher_id)
+  #student and teacher states are NOT changed.
+  #all_students<-Reduce(bind_rows,stud_dflist) %>% filter(user_state %in% c(1,9,10))
+  s1<-sprintf("update class_sessions set session_state=5 where class_session_id=%d ",sess1$class_session_id)
+  s4<-sprintf("update class_sessions set session_state=6 where class_session_id=%d ",sess4$class_session_id)
+  sdel<-sprintf("delete from live_session_status where session_id = %d",sess1$class_session_id)
+  #schg<-sprintf("update tbl_auth set  user_state = 7 where user_id = %d",all_students$student_id)
+  runsql(s1);runsql(s4);runsql(sdel);
+  #runsql(schg)
+  message("Executed following scripts:")
+  print(s1,quote = F);print(s4,quote = F);print(sdel);
 }
 
 replace_null_date<-function(table_name=NULL,date_name=NULL,key_name=NULL){
@@ -588,9 +601,6 @@ replace_null_date<-function(table_name=NULL,date_name=NULL,key_name=NULL){
     filter(complete.cases(eval(key_name)))
 }
 
-transitions<-function(type=2,entityid=4054,limit=50){
-    state_transitions(numbers = 5000) %>% filter(entity_type_id==type,entity_id==entityid) %>% head(limit)
-}
 
 show_sessions2<-function(number=10){
 show_sessions(number=number) %>% merge(table_all("classes"),by = "class_id") %>% select(1:8,14,17,20) %>% merge(table_all("subjects"))
@@ -737,12 +747,13 @@ list_XMPP_users<-function() {
     x[,1:2]
 }
 
-questions<-function(pattern=NULL,topic=NULL,question=NULL,subj=NULL,.subj=NULL,width=30){
-    d$classes<-refresh("d$classes")
-    d$questions<-refresh("d$questions")
-    d$topic<-refresh("d$topic")
-    d$subjects<-refresh("d$subjects")
-    d$lesson_plan<-refresh("d$lesson_plan")
+# this function may not be used now. Use the new ques() function and join it with ans() or ans2()
+questions<-function(pattern=NULL,topic=NULL,hrs=24,question=NULL,subj=NULL,.subj=NULL,width=getOption("width")-100){
+    d$classes<<-refresh("d$classes",time_gap_hours = hrs)
+    d$questions<<-refresh("d$questions",time_gap_hours = hrs)
+    d$topic<<-refresh("d$topic",time_gap_hours = hrs)
+    d$subjects<<-refresh("d$subjects",time_gap_hours = hrs)
+    d$lesson_plan<<-refresh("d$lesson_plan",time_gap_hours = hrs)
     if(!is.null(subj)) {
         qids<-d$questions %>% left_join(d$topic,by="topic_id") %>% filter(subject_id==subj) %>% select(question_id) %>% .[,1]
         subj_name<-d$subjects %>% filter(subject_id==subj) %>% select(subject_name) %>% .[,1]
@@ -782,19 +793,40 @@ replace_question_option<-function(option_id=NULL,text=NULL){
   SQL
 }
 
+replace_blank_qo<-function(){ # an interactive script  - will ask before replacing so go ahead and fire it,
+  b$qopt[question_option=="",question_option_id]->blank_options
+  stopifnot(length(blank_options)>0)
+  message(paste("Detected",length(blank_options),"blank options"))
+  print(blank_options)
+  X <- readline(prompt = "Enter a unique replacement string:")
+  section1 <- "UPDATE question_options SET question_option = CASE\n"
+  section2 <-    sprintf("WHEN question_option_id= %d THEN '%s'",blank_options,paste0(X,seq_along(blank_options)))
+  section2 <- paste(section2,collapse = "\n")
+  section3<- sprintf("END\nWHERE question_option_id IN (%s)",paste(blank_options,collapse = ","))
+  script<-paste(section1,section2,section3)
+  print(script)
+  Val <- readline("Validate the script and enter Y if you want to proceed, else any other key:")
+  stopifnot(Val=="Y")
+  message(paste("Updated",runsql(script),"rows of question_options. Please refresh b$qopt"))
+}
+
 replace_topic<-function(topic_id=stop("Topic_id cannot be null"),text=stop("Text cannot be null")){
   script<-"UPDATE topic SET topic_name=?y WHERE topic_id=?x LIMIT 1"
   SQL<-sqlInterpolate(ANSI(),script,x=topic_id,y=text)
   runsql(SQL)
 }
 
-display_question<-function(question=NULL){
-    refresh("d$questions")->>d$questions
-    {d$questions %>% filter(question_id==question)}[,c(2,6)] ->question_title
-    {d$questions %>% filter(question_id==question)}[,3] ->question_options
-    print(question_title)
-    print("-----------------")
-    print(question_options)
+show_quest<-function(qid=NULL){
+   main_part<- d$questions[question_id==qid,.(type=question_type_id,title=question_name)]
+   if(main_part$type %in% 1:2)
+     opts<-b$qopt[question_id==qid,.(question_option,is_ans=is_answer)] else opts="Not yet filled"
+   #if(main_part$type %in% 3)
+   if(main_part$type %in% 4) opts <- display_image(qid)
+   #if(main_part$type %in% 5)
+   #if(main_part$type %in% 6 ) 
+   main_part$type <- d$question_types[question_type_id==main_part$type,question_type_title]
+   ques_det<-list(main=main_part,options=opts)
+   ques_det
 }
 
 dq<-display_question
@@ -805,15 +837,33 @@ pic<-function(path=NULL){
   grid::grid.raster(img)
 }
 
-ques<-function(pattern=NULL,w=60){
-  ta("questions") %>%
-     filter(grepl(pattern,question_name)) %>%
-     mutate(ques=str_trunc(question_name,width=w,side="center")) %>%
-     select(question_id:topic_id,ques,scribble_id,on_the_fly)
-    # merge(ta("uploaded_images"),by.x="scribble_id",by.y="image_id") %>%
-    # select(scribble_id:uploaded_by) %>%
-    # arrange(desc(question_id))
+ques<-function(pattern="",topic=1:1000,w=getOption("width")){
+    if(is.integer(topic)) topics <-topics(topic_range = topic) else topics <-topics(pattern = topic)
+    option_counts<- b$qopt[d$questions,.(options=.N),on="question_id",by=question_id][!is.na(question_id)]
+    option_counts[d$questions,on="question_id",nomatch=NA][
+      topics,on="topic_id"][grepl(pattern,question_name,ignore.case = T)][
+        ,.(qid=question_id,topic_id,parent=parent_topic_id,scr=scribble_id,OTF=on_the_fly,
+           type=question_type_id,options,ques=str_trunc(question_name,width=w-60,side="center"))][
+             order(qid)
+           ]
 }
+
+mrq<-function(q_id=NULL){
+    question_det<- ques(w=500)[qid==q_id]
+    outp<-list()
+    outp$question <- question_det
+    outp$options <- b$qopt[question_det,.(opt_id=question_option_id,question_option,is_ans=is_answer,last_updated),on=.(question_id=qid),nomatch=0]
+    outp
+}
+
+add_mrq1<-function(quest="",options=data.frame(),topic_id=NULL,userid=499){
+    scr1 <- sprintf("INSERT INTO questions (question_type_id, topic_id, teacher_id, classification,question_name, on_the_fly ) VALUES (2,%d,%d,1,'%s',0)",topic_id,userid,quest)
+    runsql(scr1)
+    scr2 <- sprintf("SELECT question_id from questions where question_type_id=2 AND topic_id=%d AND question_name= '%s'",topic_id,quest)
+    querysql(scr2)
+}
+
+add_mrq_options <-function() # complete this with returned value from above
 
 queries<-function(n=10){
     script<-paste("select * from student_query order by query_id desc limit", n)
@@ -889,21 +939,42 @@ users_missed<-function() {
     setdiff(y,x$username)
 }
 
-topics_inClass<-function(class_id=14,tag=1){
-    ifelse(tag<2,
-           sql_text<-paste0("SELECT * FROM topic where topic_id in (select topic_id from lesson_plan where class_id=",class_id," and topic_tagged=",tag,")"),
-           sql_text<-paste0("SELECT * FROM topic where topic_id in (select topic_id from lesson_plan where class_id=",class_id, ")")
-    )
-
-    t<-suppressWarnings(  querysql(sql_text) )
-    t2<-t
-    suppressWarnings( merge(t,t2,by.x = "parent_topic_id",by.y = "topic_id")) ->t3
-    t3[,!duplicated(colnames(t3))] %>% select(13,1,5,2,8:10) %>% rename(Main_topic=topic_name.y,Maintopic_id=parent_topic_id,SubTopic=topic_name.x,SubTopic_id=topic_id,GI_num=gi_num.x,GI_den=gi_den.x,PI=pi.x)
-
+class_details<-function(classid=1,names=T,tag=T){
+    dt1<- d$topic[d$lesson_plan,.(class_id,topic_id,topic_tagged),on="topic_id"][,.(topics=list(topic_id),tags=list(topic_tagged),count=.N,tagged=sum(topic_tagged)),by=class_id][d$classes,.(teacher_id,class_id,subject_id,topics,count,tagged),on="class_id"]
+    topic_numbers<-dt1[class_id==classid,topics][[1]]
+    topics_tagged<-d$lesson_plan[topic_id %in% topic_numbers & class_id== classid & topic_tagged>0,topic_id]
+    topics_zero_tagged<- d$lesson_plan[topic_id %in% topic_numbers & class_id== classid & topic_tagged==0,topic_id]
+    topics_main<- d$topic[topic_id %in% topic_numbers & is.na(parent_topic_id),topic_id]
+    sub<-dt1[class_id==classid,subject_id]
+    subjectname<-d$subjects[subject_id==sub,subject_name]
+    t<-dt1[class_id==classid,teacher_id]
+    teacher<-d$tbl_auth[user_id==t,.(first_name,last_name,user_name)]
+    top_names<-d$topic[topic_id %in% t,topic_name]
+        outp<- list(teacher=teacher,subject=subjectname,topics=topic_numbers,main=topics_main)
+        if(names) {
+            outp$topics <- d$topic[topic_id %in% topic_numbers,topic_name]
+            outp$main <- d$topic[topic_id %in% topics_main,topic_name]
+        }
+        if(tag & names) {
+            outp$tagged <- d$topic[topic_id %in% topics_tagged,topic_name]
+            outp$not_tagged <- d$topic[topic_id %in% topics_zero_tagged,topic_name]
+        }
+        if(tag & !names) {
+            outp$tagged <- topics_tagged
+            outp$not_tagged <- topics_zero_tagged
+        }
+    return(outp)
 }
 
-main_topics_inClass<-function(class_id=14,tag=1){
-    topics_inClass(class_id,tag=tag) %>% group_by(Main_topic) %>% tally %>% rename(Count_SubTopics=n)
+main_topics_inClass<-function(class=2) {
+    subtcounts<-d$topic[!is.na(parent_topic_id),.N,by="parent_topic_id"]
+    maintopics_all()[topic_id %in% class_details(class,names = F)$main
+                     ][subtcounts,.(topic_id,main_topic=topic_name,subtopic_counts=N),on=.(topic_id=parent_topic_id),nomatch=0]
+}
+
+subtopics<- function(main=1) {
+    if(is.numeric(main)) subtopics_all()[parent_topic_id==main] else   
+    subtopics_all()[grepl(main,Parent_topic,i=T)]
 }
 
 main_topics<-function(subpat=NULL,toppat=NULL){
@@ -917,39 +988,17 @@ main_topics<-function(subpat=NULL,toppat=NULL){
 }
 
 subtopics_all<-function(){
-    t<-suppressWarnings(querysql("SELECT * from topic"))
-    s<-suppressWarnings(querysql("SELECT * from subjects"))
-    t2<-t
-    suppressWarnings( merge(t,t2,by.x = "parent_topic_id",by.y = "topic_id")) ->t3
-    t3[,!duplicated(colnames(t3))] %>% select(13,1,5,2,8:10) %>% rename(Main_topic=topic_name.y,Maintopic_id=parent_topic_id,SubTopic=topic_name.x,SubTopic_id=topic_id,GI_num=gi_num.x,GI_den=gi_den.x,PI=pi.x)
+    t2<-copy(d$topic)
+    t2[d$topic,.(topic_id, topic_name,Parent_topic=i.topic_name,parent_topic_id,subject_id), on= .(parent_topic_id=topic_id),nomatch=0][d$subjects,on="subject_id"]
 }
 
-topics<-function(pattern=NULL,topicid=NULL){
-    d$topic<-refresh("d$topic")
-    d$classes<-refresh("d$classes")
-    d$lesson_plan<-refresh("d$lesson_plan",time_gap_hours = 0.1)
-    d$subjects<-refresh("d$subjects")
-    tt<-c(is.null(pattern),is.null(topicid))
-    
-    if(identical(tt,c(F,T))){
-        x<-d$topic %>% 
-            filter(grepl(pattern,topic_name,ignore.case=T))
-    } else
-        if(identical(tt,c(T,F))) 
-            x<- d$topic %>% 
-        filter(topic_id==topicid) 
-    else
-        return("Error")
-    output<-x %>% inner_join(d$subjects,by="subject_id") %>% 
-        left_join(d$lesson_plan,by="topic_id") %>%
-        left_join(d$classes,by="class_id") %>% 
-        select(topic_id,topic_name,parent_topic_id,class_id,class_name,class_teacher=teacher_id,subject_id=subject_id.x,subject_name,class_subject=subject_id.y) %>% 
-        left_join(d$subjects[,c("subject_id","subject_name")],by=c("class_subject"="subject_id")) %>% 
-        left_join(d$topic[,c("topic_id","topic_name")],by=c("parent_topic_id"="topic_id")) %>% 
-        rename("parent_topic"="topic_name.y","topic_name"="topic_name.x","topic_subj_name"="subject_name.x","class_subj
-               _name"="subject_name.y") %>% 
-        select(topic_id:parent_topic_id,parent_topic,everything())
-    return(output)
+maintopics_all<-function(){
+    d$topic[d$subjects,on="subject_id"][is.na(parent_topic_id),.(topic_id,topic_name,subject_id,subject_name)]
+}
+
+
+topics<-function(pattern="",topic_range=1:1000){
+    d$topic[topic_id %in% topic_range & grepl(pattern,topic_name,i=T),.SD,.SDcols=c(1,2,3,5)]
 }
 
 cols<-function(table="class_sessions", dbname=database_name,exact=F){
@@ -1060,7 +1109,7 @@ suggestions<-function(recency=24){
     output<- d$category[b$suggo,on=.(category_id=cat_id)
                ][d$elements,on=.(category_id=cat_id),allow.cartesian=TRUE,nomatch=0
                  ][,.(sugg=first(suggestion_txt),stud=first(student_id),state=first(suggestion_state),
-                      session=first(session_id),cat=.(unique(category_title)),elem=.(unique(element_text))),
+                      session=first(session_id),cat=.(unique(category_title))),
                    by=suggestion_id
                    ][d$entity_states, on=.(state=state_id),nomatch=0
                      ]
@@ -1144,19 +1193,16 @@ search_functions<-function(string=str){grep(string,list_of_functions(),value=T)}
 
 #-----declare alias or short names-----
 sf<-search_functions
+sq<-show_quest
 ta<-table_all
 ss<-show_sessions
 qs<-querysql
 st<-subtopics_all
 mt<-main_topics
-tic<-topics_inClass
-rq<-replace_question
 lu<-list_users
 us<-user_status
-ms<-move_school
 sc<-start_classes
 stud<-students
-di<-display_image
 lv<-live_status
 vs<-volunteer_sessions
 

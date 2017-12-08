@@ -109,46 +109,63 @@ ChangeSessionState<-function(userid=0,SessionId=0,NewState=0){
 #* @get /UpdateMyState
 #* @serializer unboxedJSON
 UpdateMyState<-function(user=0,state=0){
-  INDIA="Asia/Kolkata"
-  if(!is.null(user) && !(is.null(state))){
-      outp<-data.table(user_id=as.numeric(user),user_state=as.numeric(state),isupdated=0,warning="")
-      #user_record <- user_status(user) # this will ensure we query the SQL table only once
-      snapshot<-RefreshMyApp(userid = user)
-      old_state<-snapshot$Summary$MyState
-      if(state %in% c(1,11) && (is.na(snapshot$Summary$CurrentSessionState) ||  snapshot$Summary$CurrentSessionState != 1)) {
-          outp$warning <-paste("rejecting update to state",state,"because current session is not live(",snapshot$Summary$CurrentSessionState,")")
-          message( outp$warning) 
-          outp$user_state<-old_state
-          } else 
-          if(state!=old_state) {
-              #user_record$user_state<-state
-              script<-"UPDATE tbl_auth SET user_state = ?x where user_id=?y LIMIT 1"
-              sql<-sqlInterpolate(ANSI(),script,x=state,y=user)
-              rows_modified<-runsql(sql)
-              if(rows_modified>0) {
-                  outp$isupdated <- 1
-                  script2<-sprintf("INSERT INTO state_transitions (entity_type_id, entity_id, from_state, to_state,transition_time) VALUES (%d, %d, %d, %d, '%s')",
-                                   1,as.numeric(user),as.numeric(old_state),as.numeric(state),now())
-                  runsql(script2)
-              } else {
-                  outp$warning <-paste("No Update happened despite a different state for new state:",state, "and old state:",snapshot$Summary$MyState)
-                  message(paste("Warning:",outp$warning))
-              }
-      } else {
-          rows_modified<-0
-          outp$warning <-paste("No Update happened as old state was already:",state)
-          message(paste("Warning:",outp$warning))
-      }
-  } else outp <- data.table(Error="Need two parameters to this API, user and state")
-log(api="UpdateMyState",user=user, parameters= paste0("state:",state),returned_value= toJSON(outp))
-outp
+    INDIA="Asia/Kolkata"
+    if(!is.null(user) && !(is.null(state))){
+        outp<-data.table(user_id=as.numeric(user),user_state=as.numeric(state),isupdated=0,warning="")
+        #user_record <- user_status(user) # this will ensure we query the SQL table only once
+        snapshot<-RefreshMyApp(userid = user)
+        old_state<-snapshot$Summary$MyState
+        if(state %in% c(1,11) && (is.na(snapshot$Summary$CurrentSessionState) ||  snapshot$Summary$CurrentSessionState != 1)) {
+            outp$warning <-paste("rejecting update to state",state,"because current session is not live(",snapshot$Summary$CurrentSessionState,")")
+            message( outp$warning) 
+            outp$user_state<-old_state
+        } else 
+            if(state!=old_state) {
+                #user_record$user_state<-state
+                script<-"UPDATE tbl_auth SET user_state = ?x where user_id=?y LIMIT 1"
+                sql<-sqlInterpolate(ANSI(),script,x=state,y=user)
+                rows_modified<-runsql(sql)
+                if(rows_modified>0) {
+                    outp$isupdated <- 1
+                    script2<-sprintf("INSERT INTO state_transitions (entity_type_id, entity_id, from_state, to_state,transition_time) VALUES (%d, %d, %d, %d, '%s')",
+                                     1,as.numeric(user),as.numeric(old_state),as.numeric(state),now())
+                    runsql(script2)
+                } else {
+                    outp$warning <-paste("No Update happened despite a different state for new state:",state, "and old state:",snapshot$Summary$MyState)
+                    message(paste("Warning:",outp$warning))
+                }
+            } else {
+                rows_modified<-0
+                outp$warning <-paste("No Update happened as old state was already:",state)
+                message(paste("Warning:",outp$warning))
+            }
+    } else outp <- data.table(Error="Need two parameters to this API, user and state")
+    log(api="UpdateMyState",user=user, parameters= paste0("state:",state),returned_value= toJSON(outp))
+    outp
 }
 
+#* @get /UpdateMyState
+#* @serializer unboxedJSON
+UpdateMyState2<-function(user=0,state=0){
+    fwrite(x = data.table(user_id=user,state_id=state,time=now()),append = T,file = "input_pipeline.log")
+    p1<- fread(input = "input_pipeline.log",colClasses = c("numeric","numeric","character"))
+    p2<-p1[,.(user_id=V1,state_id=V2,dt=ymd_hms(V3,tz = "UTC"))
+           ][user_id==user,.(user_id,state_id,dt,tm2=shift(dt,type = "lag"),ostate=shift(state_id,type = "lag"))
+             ]
+    p3<-p2[,.(user_id,state_id,dt,gap=round(dt-tm2,digits = 1),ostate,is_same=(ostate==state_id))
+           ][,.(user_id,state_id,dt,gap,ostate,is_same,allowed=allowed_state(old=ostate,new=state_id))
+             ][,.(user_id,state_id,dt,gap,ostate,is_same,allowed,isupdated=ifelse((is_same | !allowed=="Legal"),0,1))
+               ][,.(dt,gap,user_id,ostate,state_id,is_same,isupdated,warning=ifelse(isupdated==0,ifelse(is_same,"Same state","Illegal state transition"),""))
+                 ]
+    # lastline <-p2[,.(user_id=user,user_state=last(state_id),isupdated=as.numeric(last(!is_same)),warning=ifelse(last(is_same),"Identical old & new states",allowed_state(last(ostate),last(state))))]
+    fwrite(last(p3),file="processed_pipeline.log",append = T)
+    #log(api="UpdateMyState",user=user, parameters= paste0("state:",state),returned_value= toJSON(outp))
+    return(p3)
+}
 
 #* @get /GetSessionInfo
 GetSessionInfo<-function(SessionId=0,userid=0){
   log("GetSessionInfo",userid, paste("SessionId:",SessionId))
-  INDIA="Asia/Kolkata"
   if(is.null(SessionId)) return("error_message:SessionId cannot be NULL") else {
     script<-paste("SELECT * FROM class_sessions where class_session_id=",SessionId)
     querysql(script) %>%
@@ -174,33 +191,7 @@ GetSessionInfo2<-function(SessionId=0,userid=0){
   }
 }
 
-topics<-function(class_id,tag=1){
-  ifelse(tag<2,
-         sql_text<-paste0("SELECT * FROM topic where topic_id in (select topic_id from lesson_plan where class_id=",class_id," and topic_tagged=",tag,")"),
-         sql_text<-paste0("SELECT * FROM topic where topic_id in (select topic_id from lesson_plan where class_id=",class_id, ")")
-  )
-  
-  t<-suppressWarnings(  querysql(sql_text,database))
-  t2<-t
-  suppressWarnings( merge(t,t2,by.x = "parent_topic_id",by.y = "topic_id")) ->t3
-  t3[,!duplicated(colnames(t3))] %>% select(13,1,5,2,8:10) %>% rename(Main_topic=topic_name.y,Maintopic_id=parent_topic_id,SubTopic=topic_name.x,SubTopic_id=topic_id,GI_num=gi_num.x,GI_den=gi_den.x,PI=pi.x)
-}
 
-main_topics<-function(class_id=14){
-  topics(class_id) %>% group_by(Main_topic) %>% tally %>% rename(Count_SubTopics=n) %>% print(n=Inf)
-}
-
-topics_inClass<-function(class_id=14,tag=1){
-  ifelse(tag<2,
-         sql_text<-paste0("SELECT * FROM topic where topic_id in (select topic_id from lesson_plan where class_id=",class_id," and topic_tagged=",tag,")"),
-         sql_text<-paste0("SELECT * FROM topic where topic_id in (select topic_id from lesson_plan where class_id=",class_id, ")")
-  )
-  
-  t<-suppressWarnings(  querysql(sql_text,database_name) )
-  t2<-t
-  suppressWarnings( merge(t,t2,by.x = "parent_topic_id",by.y = "topic_id")) ->t3
-  t3[,!duplicated(colnames(t3))] %>% select(13,1,5,2,8:10) %>% rename(Main_topic=topic_name.y,Maintopic_id=parent_topic_id,SubTopic=topic_name.x,SubTopic_id=topic_id,GI_num=gi_num.x,GI_den=gi_den.x,PI=pi.x)
-}
 
 #* @get /Login
 Login<-function(app_id=0, user_name="BLANK",pass=NULL,uuid="BLANK",lat=0,long=0,app_version=0)
@@ -363,7 +354,6 @@ GetMyTodaysSessions<-function(user=0,uuid="BLANK",refresh_minutes=10) {
 RefreshMyApp<-function(userid=0,uuid="BLANK"){
     d$tbl_auth <<- refresh("d$tbl_auth",time_gap_hours = 0)
   #remove_ended()
-  INDIA="Asia/Kolkata"
   old_rooms<-data.frame()
   current_session<-F
   next_session<-F
@@ -376,8 +366,6 @@ RefreshMyApp<-function(userid=0,uuid="BLANK"){
     suppressWarnings(show_sessions(user=userid)) %>%
       select(class_session_id,starts_on,ends_on,session_state) -> session_list
     time<-now()
-    #tz(session_list$starts_on)<-"Asia/Kolkata"
-    #tz(session_list$ends_on)<-"Asia/Kolkata"
     m1<-time>session_list$starts_on
     m2<-time>session_list$ends_on
     m3<-xor(m1,m2)
@@ -644,6 +632,20 @@ stud_list<-function(session_id=NULL,userid=NULL,hours_index=1,hours_tblauth=10,h
 }
 
 #----these functions are non API endpoints and referred to my the API end point functions.
+
+new_state <- function() {
+    last_state_updated_at <- now()
+    function() {
+        time_from_last_update <<- now() - last_state_updated_at
+        last_state_updated_at<-now()
+        time_from_last_update
+    }
+}
+
+allowed_state <- function(old=NULL,new=NULL){
+    legalst<-data.table(from=c(1,1,9,9,7,8,7,10,10,11,11,10,11,8,7),to=c(11,7,10,7,8,7,9,9,7,1,7,1,7,9,10)) # all legal state transitions for a user
+    if(new %in% legalst[from==old,to]) "Legal" else "Illegal state change"
+}
 
 update_lessonplan<-function(update=NULL,classid=NULL){
   con=dbConnect(MySQL(),dbname=database_name,host=host_address)
