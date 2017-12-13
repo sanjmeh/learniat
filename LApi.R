@@ -82,7 +82,7 @@ ChangeSessionState<-function(userid=0,SessionId=0,NewState=0){
     script2<-sqlInterpolate(ANSI(),script2,state=NewState,id=SessionId)
     n2=runsql(script2)
   } 
-  if(NewState==5 && ending_time > now()){
+  if(NewState==5 && ending_time > now()){ # to adjust time if class session ends before time
       script4<-sprintf("UPDATE class_sessions SET ends_on = '%s' WHERE class_session_id=%d LIMIT 1",now(),as.numeric(SessionId))
       n4=runsql(script4)
   }
@@ -131,7 +131,7 @@ UpdateMyState<-function(user=0,state=0){
                                      1,as.numeric(user),as.numeric(old_state),as.numeric(state),now())
                     runsql(script2)
                 } else {
-                    outp$warning <-paste("No Update happened despite a different state for new state:",state, "and old state:",snapshot$Summary$MyState)
+                    outp$warning <-paste("No Update happened for", user,"despite a different state for new state:",state, "and old state:",snapshot$Summary$MyState)
                     message(paste("Warning:",outp$warning))
                 }
             } else {
@@ -146,21 +146,48 @@ UpdateMyState<-function(user=0,state=0){
 
 #* @get /UpdateMyState
 #* @serializer unboxedJSON
-UpdateMyState2<-function(user=0,state=0){
-    fwrite(x = data.table(user_id=user,state_id=state,time=now()),append = T,file = "input_pipeline.log")
-    p1<- fread(input = "input_pipeline.log",colClasses = c("numeric","numeric","character"))
-    p2<-p1[,.(user_id=V1,state_id=V2,dt=ymd_hms(V3,tz = "UTC"))
-           ][user_id==user,.(user_id,state_id,dt,tm2=shift(dt,type = "lag"),ostate=shift(state_id,type = "lag"))
-             ]
-    p3<-p2[,.(user_id,state_id,dt,gap=round(dt-tm2,digits = 1),ostate,is_same=(ostate==state_id))
-           ][,.(user_id,state_id,dt,gap,ostate,is_same,allowed=allowed_state(old=ostate,new=state_id))
-             ][,.(user_id,state_id,dt,gap,ostate,is_same,allowed,isupdated=ifelse((is_same | !allowed=="Legal"),0,1))
-               ][,.(dt,gap,user_id,ostate,state_id,is_same,isupdated,warning=ifelse(isupdated==0,ifelse(is_same,"Same state","Illegal state transition"),""))
-                 ]
-    # lastline <-p2[,.(user_id=user,user_state=last(state_id),isupdated=as.numeric(last(!is_same)),warning=ifelse(last(is_same),"Identical old & new states",allowed_state(last(ostate),last(state))))]
-    fwrite(last(p3),file="processed_pipeline.log",append = T)
+UpdateMyState2<-function(user=0,state=0,flush=F,st_file="processed_pipeline.log"){
+    
+    if(!file.exists(st_file) || file.info(st_file)$size==0 || flush) {
+        file.create(st_file)
+        fwrite(x = data.table(time=now(),user_id=user,new_state=state,curr_state=state,ostate=0,gap=0,state_change="NOT YET DEFINED",is_updated=99),append = F,file = st_file,)   
+    }
+    legalst <- data.table(from = c(1,1,9,9,7,8,7,10,10,11,11,10,11,8,7), 
+                          to = c(11,7,10,7,8,7,9,9,7,1,7,1,7,9,10))
+    p1<- fread(input = st_file)
+    p1[,time:=ymd_hms(time,tz = India)]
+    p1[,gap:=as.difftime(gap,units = "secs")]
+    lastline<-last(p1[user_id==user])
+    newline<-data.table(time=now(tzone = India),user_id=user,new_state=state,curr_state=NA_integer_,ostate=NA_integer_,gap=0,state_change=NA_character_,is_updated=NA_integer_)
+    if(nrow(lastline)==1) {
+        newline$ostate <- lastline$curr_state
+        if(state %in% legalst[from==lastline$curr_state,to]){
+            newline$is_updated = 1 
+            newline$curr_state = state
+            newline$state_change = "Legal"
+        } else
+            if(state == lastline$curr_state) {
+                newline$is_updated = 0
+                newline$curr_state = state
+                newline$state_change = "Same state as last state"
+            } else
+            {
+            newline$is_updated = 0 
+            newline$state_change = "Illegal"
+            newline$curr_state = lastline$curr_state 
+            }
+        newline$gap = now()-lastline$time
+    } else 
+    {
+        newline$is_updated = 1
+        newline$curr_state = state
+        newline$state_change = "Initial state for this user"
+        newline$gap = as.difftime(0,units = "secs")
+    }
+    p1<-rbind(p1,newline)
+    fwrite(newline,file=st_file,append = T)
     #log(api="UpdateMyState",user=user, parameters= paste0("state:",state),returned_value= toJSON(outp))
-    return(p3)
+    return(p1[user_id==user])
 }
 
 #* @get /GetSessionInfo
@@ -535,7 +562,7 @@ SetModel<-function(userid=0,asses_id=0,model_flag=0){
 
 #* @get /list_classes
 #* @serializer unboxedJSON
-list_classes<-function(teacher=NULL,hours=1,userid=NULL){
+list_classes<-function(teacher=NULL,hours=24,userid=NULL){
     refresh("b$sessions100",time_gap_hours=hours) ->> b$sessions100
     refresh("d$classes",time_gap_hours=hours) ->> d$classes
     outp <- b$sessions100 %>% left_join(d$classes,by="class_id") %>% filter(teacher_id.x==teacher) %>% select(class_id,class_name) %>% distinct()

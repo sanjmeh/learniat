@@ -77,6 +77,7 @@ reloadDB<- function(which=NULL){
     val
 }
 
+
 refresh<-function(variable_name=NULL,time_gap_hours=24,history=100,transition_history=30){
     if(grepl("$",variable_name,fixed = T)){
         expr<-paste("attr(",variable_name,",which='last_upd'",")")
@@ -93,7 +94,6 @@ refresh<-function(variable_name=NULL,time_gap_hours=24,history=100,transition_hi
                            "b$qvarchive"=data.frame(text="qvarchive is not downloaded"),
                            "b$ques_log"=suppressWarnings(querysql(sprintf("select * from question_log where start_time> DATE_SUB(NOW(),INTERVAL %d DAY) ",history))),
                            "b$qopt"=suppressWarnings(querysql(sprintf("select * from question_options"))),
-                           
                            "b$st_tr100"= suppressWarnings(querysql(sprintf("SELECT * FROM state_transitions where transition_time>DATE_SUB(NOW(),INTERVAL %d DAY) ",transition_history))),
                            "b$ss_time"=suppressWarnings(querysql(sprintf("select * from stud_session_time where last_seen> DATE_SUB(NOW(),INTERVAL %d DAY) ",history))),
                            "b$stt"=suppressWarnings(querysql(sprintf("select * from stud_topic_time where last_seen> DATE_SUB(NOW(),INTERVAL %d DAY) ",history))),
@@ -585,10 +585,11 @@ auto_cancel<-function(days_old=1,recent=1){
   s4<-sprintf("update class_sessions set session_state=6 where class_session_id=%d ",sess4$class_session_id)
   sdel<-sprintf("delete from live_session_status where session_id = %d",sess1$class_session_id)
   #schg<-sprintf("update tbl_auth set  user_state = 7 where user_id = %d",all_students$student_id)
-  runsql(s1);runsql(s4);runsql(sdel);
+  sql_array<-list(s1,s4,sdel)
+  lapply(sql_array,function(x){ if (length(x)>0) lapply(x,runsql)});
   #runsql(schg)
-  message("Executed following scripts:")
-  print(s1,quote = F);print(s4,quote = F);print(sdel);
+  #message("Executed following scripts:")
+  #print(sql_array)
 }
 
 replace_null_date<-function(table_name=NULL,date_name=NULL,key_name=NULL){
@@ -829,7 +830,6 @@ show_quest<-function(qid=NULL){
    ques_det
 }
 
-dq<-display_question
 
 pic<-function(path=NULL){
   download.file(file.path("http://54.251.104.13/images",path),'~/Downloads/SM001.png')
@@ -863,7 +863,10 @@ add_mrq1<-function(quest="",options=data.frame(),topic_id=NULL,userid=499){
     querysql(scr2)
 }
 
-add_mrq_options <-function() # complete this with returned value from above
+add_mrq_options <-function(){ # complete this with returned value from above
+    
+    
+}
 
 queries<-function(n=10){
     script<-paste("select * from student_query order by query_id desc limit", n)
@@ -1098,7 +1101,8 @@ output
 
 category<-function(recency=24){
     d$category<<-refresh("d$category",time_gap_hours = recency)
-    d$elements[d$category,on=.(cat_id=category_id),nomatch=0]
+    d$elements<<-refresh("d$elements",time_gap_hours = recency)
+    d$elements[d$category,on=.(cat_id=category_id),nomatch=0][,.(count_elements=.N),by=.(category_title,cat_id)]
 }
 suggestions<-function(recency=24){ 
     b$suggo<<-refresh("b$suggo",time_gap_hours = recency)
