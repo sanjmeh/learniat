@@ -144,7 +144,7 @@ UpdateMyState<-function(user=0,state=0){
     outp
 }
 
-#* @get /UpdateMyState
+#* @get /UpdateMyState2
 #* @serializer unboxedJSON
 UpdateMyState2<-function(user=0,state=0,flush=F,st_file="processed_pipeline.log"){
     
@@ -156,7 +156,7 @@ UpdateMyState2<-function(user=0,state=0,flush=F,st_file="processed_pipeline.log"
                           to = c(11,7,10,7,8,7,9,9,7,1,7,1,7,9,10))
     p1<- fread(input = st_file)
     p1[,time:=ymd_hms(time,tz = India)]
-    p1[,gap:=as.difftime(gap,units = "secs")]
+    #p1[,gap:=as.difftime(gap,units = "secs")]
     lastline<-last(p1[user_id==user])
     newline<-data.table(time=now(tzone = India),user_id=user,new_state=state,curr_state=NA_integer_,ostate=NA_integer_,gap=0,state_change=NA_character_,is_updated=NA_integer_)
     if(nrow(lastline)==1) {
@@ -176,13 +176,13 @@ UpdateMyState2<-function(user=0,state=0,flush=F,st_file="processed_pipeline.log"
             newline$state_change = "Illegal"
             newline$curr_state = lastline$curr_state 
             }
-        newline$gap = now()-lastline$time
+        newline$gap = as.numeric(now()-lastline$time)
     } else 
     {
         newline$is_updated = 1
         newline$curr_state = state
         newline$state_change = "Initial state for this user"
-        newline$gap = as.difftime(0,units = "secs")
+        newline$gap = 0
     }
     p1<-rbind(p1,newline)
     fwrite(newline,file=st_file,append = T)
