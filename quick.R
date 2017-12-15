@@ -132,7 +132,7 @@ refresh<-function(variable_name=NULL,time_gap_hours=24,history=100,transition_hi
     if(exists("updated_df_withtime") && nrow(updated_df_withtime)<2) {
         message(paste(variable_name,":","either zero rows found or variable cannot be refreshed due to a problem"))
         }else 
-        if(exists("updated_df_withtime") && (rows<-nrow(updated_df_withtime)) >1 ) cat(paste0("\nloaded:",variable_name,":",rows," rows\n")) 
+        if(exists("updated_df_withtime") && (rows<-nrow(updated_df_withtime)) >1 ) cat(paste0("loaded:",variable_name,":",rows," rows\n")) 
     if(exists("updated_df_withtime")) updated_df_withtime else {
         cat(".")   
         as.data.table(eval(parse(text = variable_name)))
