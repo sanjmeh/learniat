@@ -230,22 +230,16 @@ display_image<-function(qid=NULL){
 }
 
 # this function has to be fine tuned in line with the new path management
-display_ipad_image<-function(ass_ansid=NULL,image_file=NULL, baseurl='http://54.251.104.13/images',recency_minutes=10){
+display_ipad_image<-function(ass_ansid=NULL,image_file=NULL,recency_minutes=10){
     refresh("b$assesm",time_gap_hours = recency_minutes/60) ->> b$assesm
     refresh("b$images",time_gap_hours = recency_minutes/60) ->> b$images
     
     dt1<-b$assesm[b$images,.(date=DateUploaded,assessment_answer_id,student_id,question_log_id,class_session_id,image_path),on=.(teacher_scribble_id=image_id),nomatch=0]
     
-    if(is.null(ass_ansid)){
-        pic_url<-file.path(baseurl,image_file)
-    } else 
-    {
-        image_file<-image_file <- dt1[assessment_answer_id==ass_ansid,image_path]
-        pic_url<-file.path(baseurl,image_file)
-    }   
-    content<-getURLContent(pic_url)
+    fullpath<-file.path(url_images,ifelse(!is.null(image_file),image_file,dt1[assessment_answer_id==ass_ansid,image_path]))
+    content<-getURLContent(fullpath)
     png_obj<-readPNG(content,info = T)
-    plot(x = c(0,1200),y=c(0,800))
+    plot(x = c(0,1100),y=c(0,800))
     rasterImage(png_obj,0,0,1024,768)    
 }
 
@@ -454,46 +448,28 @@ user<-function(name="Edna"){
 table_all("tbl_auth") %>% filter(grepl(name,ignore.case = T, user_name))
 }
 
-rooms<-function(){
-  grid_seat_counts()[,.(room_id,seat_counts)][order(room_id)]
-}
-
 change_room<-function(greater_than=NULL,room_id=NULL,limit=10){
     script<-"UPDATE class_sessions SET room_id=?x where class_session_id>?y limit ?li"
     script<-sqlInterpolate(ANSI(),script,x=room_id,y=greater_than,li=limit)
     runsql(script)
 }
 
-seating<-function(refresh_hours=72){
-  sgrids<-grid_seat_counts()
-  d$seat_assignments<<-refresh("d$seat_assignments",time_gap_hours = refresh_hours)
-  sessions100<<-refresh("sessions100",time_gap_hours = refresh_hours)
-  d$seat_assignments %>%
-      group_by(class_session_id) %>%
-      summarise(seats=n()) %>%
-      merge(sessions100,by="class_session_id") %>%
-      merge(sgrids,by="room_id") %>%
-      select(-ends_with("on"),-ends_with("ed"),-c(gi_num,gi_den,pi,session_state)) %>% 
-      select(class_session_id,everything()) %>% 
-      arrange(desc(class_session_id)) %>% 
-      as.data.table()
-}
-
 room_efficiency<-function(summary=T) {
-        refresh("b$sessions100")->>b$sessions100
-        output<-rooms()[b$sessions100,{
-        sess=class_session_id;
-        date=date(starts_on);
-        room=room_id;
-        regis=total_stud_registered;
-        seat=seat_counts;
-        tot=total_stud_registered;
-        class=class_id;
-        teacher=teacher_id
-        .(session=sess,class=class,teacher=teacher,room=room,date=date,stud=regis,seat=seat,perc_seats_used=percent(tot/seat))
-    },
-    on="room_id",nomatch=0][order(-perc_seats_used)]
-        if(summary) output<-output[,.(maxseat=max(seat),max_stud=max(stud),utiliz=percent(max(stud)/max(seat))),by=c("class","room","teacher")][order(class,room,teacher)]
+    refresh("b$sessions100")->>b$sessions100
+    output<-rooms()[b$sessions100,
+                    {
+                        sess=class_session_id;
+                        date=date(starts_on);
+                        room=room_id;
+                        regis=total_stud_registered;
+                        seat=seat_counts;
+                        tot=total_stud_registered;
+                        class=class_id;
+                        teacher=teacher_id
+                        .(session=sess,class=class,teacher=teacher,room=room,date=date,stud=regis,seat=seat,perc_seats_used=percent(tot/seat))
+                    },
+                    on="room_id",nomatch=0][order(-perc_seats_used)]
+    if(summary) output<-output[,.(maxseat=max(seat),max_stud=max(stud),utiliz=percent(max(stud)/max(seat))),by=c("class","room","teacher")][order(class,room,teacher)]
     output
 }
 
@@ -505,31 +481,31 @@ dt1[,best_room := .SD[order(-utiliz)]$room[1], by=class
 }
 
 valid_rooms<-function(singclass=NULL){
-    classes()[,.(class_id,class_name,SREGIS=stud_regist)
-              ][rooms(),.(room_id,seat_counts,class_id,class_name),by=.EACHI,on="SREGIS<=seat_counts"
+    classes()[,.(class_id,class_name,stud_regist)
+              ][rooms(),.(room_id,seat_counts,class_id,class_name),by=.EACHI,on="stud_regist<=seat_counts"
                 ][class_id == singclass][,room_id]
 }
 
-room_to_classes<-function(uniform=F,reverse=F){
+room_to_classes<-function(uniform=F,reverse=F){ # this function is useless. Ignore. Will be deleted soon
     tt=c(uniform,reverse)
     if(identical(tt,c(T,T)))
-        output<-classes()[,.(class_id,room_id,class_name,teacher_id)
-                  ][sessions100,on="class_id"
+        output<-classes()[,.(class_id,class_name,teacher_id)
+                  ][b$sessions100,on="class_id"
                     ][,.(rooms=sort((unique(i.room_id)))),by=class_id][order(class_id)]
 
     if(identical(tt,c(F,T)))
-        output<-classes()[,.(class_id,room_id,class_name,teacher_id)
-                  ][sessions100,on="class_id"
+        output<-classes()[,.(class_id,class_name,teacher_id)
+                  ][b$sessions100,on="class_id"
                     ][,.(listrooms=.(sort((unique(i.room_id))))),by=class_id][order(class_id)]
         
     if(identical(tt,c(F,F)))
-        output<-classes()[,.(class_id,room_id,class_name,teacher_id)
-              ][sessions100,on="class_id"
+        output<-classes()[,.(class_id,class_name,teacher_id)
+              ][b$sessions100,on="class_id"
                 ][,c(1,3,4,5,6,7,8)
                   ][,.(listclasses=.(sort((unique(class_id))))),by=.(room=i.room_id)][order(room)]
     if(identical(tt,c(T,F)))
-        output<-classes()[,.(class_id,room_id,class_name,teacher_id)
-                  ][sessions100,on="class_id"
+        output<-classes()[,.(class_id,class_name,teacher_id)
+                  ][b$sessions100,on="class_id"
                     ][,c(1,3,4,5,6,7,8)
                       ][,.(class=sort((unique(class_id)))),by=.(room=i.room_id)][order(room)]
     
@@ -622,12 +598,12 @@ students2<-function(class_id=NULL,session=NULL){ # delete this once everything i
 
 students<-function(class_id=NULL,session=NULL,refresh=F){
     cl_id<-class_id
+    if(refresh) refresh("d$student_class_map",time_gap_hours = 0) ->> d$student_class_map
     if(!is.null(class_id)) {
-        if(refresh) refresh("d$tbl_auth",time_gap_hours = 0) ->> d$tbl_auth
          outp<- d$tbl_auth[d$student_class_map[class_id==cl_id],.(student_id,first_name,last_name,grade_id,user_state),on=.(user_id=student_id)] 
         }else
             if(!is.null(session)) {
-                outp<- students(classid(session_id=session,recent = 0.1),refresh = refresh)
+                outp<- students(classid(session_id=session,recent = ifelse(refresh,0,24)),refresh = refresh)
             } else "Incorrect input"
     outp
 }
@@ -693,10 +669,13 @@ classes<-function(user=NULL,school="ALL",detail=T,refreshNow=F){
                 class_list<- classes()[academic_term_id %in% valid_acad_terms]
             } else 
             {class_list<-
-                d$tbl_auth[d$classes,on=c(user_id="teacher_id")][d$subjects,.(class_id,class_name,school_id,teacher_id=user_id, TeacherName=user_name, grade=i.grade_id,section=i.section_id,academic_term_id, stud_regist,subject_id,subject_name,GI=percent(gi_num/gi_den),pi),on="subject_id",nomatch=F][order(class_id)]
+                d$tbl_auth[d$classes,on=c(user_id="teacher_id")][
+                    d$subjects,.(class_id,class_name,school_id,teacher_id=user_id, TeacherName=user_name, grade=i.grade_id,section=i.section_id,academic_term_id, 
+                                 stud_regist,subject_id,subject_name,GI=percent(gi_num/gi_den),pi),on="subject_id",nomatch=F][order(class_id)]
             #select(starts_with("class"),school_id,teacher_id, TeacherName=user_name, grade_id,section_id, stud_regist,starts_with("subj"),gi_num,gi_den,pi) %>%
             if(!detail) class_list<-class_list$class_id
             }
+    cat("\n")
     class_list
 }
 
@@ -733,13 +712,12 @@ class_conflict<-function(classes=1:20){
   }
 }
 
-grid_seat_counts<-function(){
+rooms<-function(){
     d$seating_grids<<-refresh("d$seating_grids",time_gap_hours = 24)
-    grids<-d$seating_grids
-    rcount<-grids$seats_removed %>% str_count(pattern=",") # count commas in the seats_removed column
-    rcount<-ifelse(rcount,rcount+1,0) #add one to comma count if at least one
-    grids$seat_counts<-grids$seat_rows*grids$seat_columns-rcount # subtract seats removed
-    grids
+    grids<-copy(d$seating_grids)
+    grids[,rcount := str_count(string = seats_removed,pattern="A")] # count number of 'A's
+    grids[,seat_counts:= seat_rows*seat_columns - rcount] # subtract seats removed
+    grids[,.(room_id,row=seat_rows,col=seat_columns,seat_counts)][order(room_id)]
 }
 
 list_XMPP_users<-function() {
@@ -818,7 +796,7 @@ replace_topic<-function(topic_id=stop("Topic_id cannot be null"),text=stop("Text
 }
 
 show_quest<-function(qid=NULL){
-   main_part<- d$questions[question_id==qid,.(type=question_type_id,title=question_name)]
+   main_part<- d$questions[question_id==qid,.(type=question_type_id,title=question_name,last_updated)]
    if(main_part$type %in% 1:2)
      opts<-b$qopt[question_id==qid,.(question_option,is_ans=is_answer)] else opts="Not yet filled"
    #if(main_part$type %in% 3)
@@ -827,7 +805,7 @@ show_quest<-function(qid=NULL){
    #if(main_part$type %in% 6 ) 
    main_part$type <- d$question_types[question_type_id==main_part$type,question_type_title]
    ques_det<-list(main=main_part,options=opts)
-   ques_det
+   ques_det[]
 }
 
 
@@ -838,7 +816,7 @@ pic<-function(path=NULL){
 }
 
 ques<-function(pattern="",topic=1:1000,w=getOption("width")){
-    if(is.integer(topic)) topics <-topics(topic_range = topic) else topics <-topics(pattern = topic)
+    if(is.numeric(topic)) topics <-topics(topic_range = topic) else topics <-topics(pattern = topic)
     option_counts<- b$qopt[d$questions,.(options=.N),on="question_id",by=question_id][!is.na(question_id)]
     option_counts[d$questions,on="question_id",nomatch=NA][
       topics,on="topic_id"][grepl(pattern,question_name,ignore.case = T)][
@@ -864,10 +842,14 @@ add_mrq1<-function(quest="",options=data.frame(),topic_id=NULL,userid=499){
 }
 
 add_mrq_options <-function(){ # complete this with returned value from above
-    
-    
 }
 
+add_ques<-function(quest="Dummy text",type=6,options=data.frame(),topic_id=NULL,userid=499){
+    scr1 <- sprintf("INSERT INTO questions (question_type_id, topic_id, teacher_id, classification,question_name, on_the_fly ) VALUES (%d,%d,%d,1,'%s',0)",type,topic_id,userid,quest)
+    runsql(scr1)
+    scr2 <- sprintf("SELECT question_id from questions where question_type_id=%d AND topic_id=%d AND question_name= '%s'",type,topic_id,quest)
+    querysql(scr2)
+}
 queries<-function(n=10){
     script<-paste("select * from student_query order by query_id desc limit", n)
     q<-suppressWarnings(querysql(script))
@@ -943,9 +925,11 @@ users_missed<-function() {
 }
 
 class_details<-function(classid=1,names=T,tag=T){
-    dt1<- d$topic[d$lesson_plan,.(class_id,topic_id,topic_tagged),on="topic_id"][,.(topics=list(topic_id),tags=list(topic_tagged),count=.N,tagged=sum(topic_tagged)),by=class_id][d$classes,.(teacher_id,class_id,subject_id,topics,count,tagged),on="class_id"]
+    dt1<- d$topic[d$lesson_plan,.(class_id,topic_id,topic_tagged),on="topic_id"][
+        ,.(topics=list(topic_id),tags=list(topic_tagged),count=.N,tagged=sum(topic_tagged)),by=class_id][
+            d$classes,.(teacher_id,class_id,subject_id,topics,count,tagged),on="class_id"]
     topic_numbers<-dt1[class_id==classid,topics][[1]]
-    topics_tagged<-d$lesson_plan[topic_id %in% topic_numbers & class_id== classid & topic_tagged>0,topic_id]
+    topics_tagged<-d$lesson_plan[topic_id %in% topic_numbers & class_id== classid & topic_tagged>0,topic_id] # assuming we still consider tags 1,2,3.. as tagged and only 0 is untagged
     topics_zero_tagged<- d$lesson_plan[topic_id %in% topic_numbers & class_id== classid & topic_tagged==0,topic_id]
     topics_main<- d$topic[topic_id %in% topic_numbers & is.na(parent_topic_id),topic_id]
     sub<-dt1[class_id==classid,subject_id]
@@ -975,10 +959,19 @@ main_topics_inClass<-function(class=2) {
                      ][subtcounts,.(topic_id,main_topic=topic_name,subtopic_counts=N),on=.(topic_id=parent_topic_id),nomatch=0]
 }
 
-subtopics<- function(main=1) {
-    if(is.numeric(main)) subtopics_all()[parent_topic_id==main] else   
-    subtopics_all()[grepl(main,Parent_topic,i=T)]
+subtopics<- function(main=NULL,subj=NULL) { # completely overhauled so that we have no separate id and pattern paramters
+    tt<- c(!is.null(main),!is.null(subj))
+    if(identical(tt,c(T,F))){
+        if(is.numeric(main)) outp<- subtopics_all()[parent_topic_id==main] else   
+            outp<-subtopics_all()[grepl(main,Parent_topic,i=T)]
+    } else  
+        if(identical(tt,c(F,T))){
+            if(is.numeric(subj)) outp<- subtopics_all()[subject_id==subj] else   
+                outp<-subtopics_all()[grepl(subj,subject_name,i=T)]
+        }
+    outp
 }
+
 
 main_topics<-function(subpat=NULL,toppat=NULL){
     tt<-c(is.null(subpat),is.null(toppat))
@@ -1065,9 +1058,12 @@ show_sessions<-function(user="ALL",class="ALL", days=1,limit=30){
      x$ends_on %<>% ymd_hms(tz=INDIA)
   } 
   if(state=="STUDENT") {
-    x %<>% filter(class_id %in% classes(user = user,detail=F))
+    x<-x[class_id %in% classes(user = user,detail=F)]
   } else "ERROR"
-  arrange(x,starts_on)
+  #browser()
+ x[,nexts:=shift(starts_on,type = "lead")][,overlap:=ifelse(nexts<ends_on,T,F)]
+ cat("\n")
+ x[,-"nexts"][]
 }
 
 user_status<-function(users=monitored_users) {

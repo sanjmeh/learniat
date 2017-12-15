@@ -144,7 +144,7 @@ UpdateMyState<-function(user=0,state=0){
     outp
 }
 
-#* @get /UpdateMyState
+#* @get /UpdateMyState2
 #* @serializer unboxedJSON
 UpdateMyState2<-function(user=0,state=0,flush=F,st_file="processed_pipeline.log"){
     
