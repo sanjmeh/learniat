@@ -606,7 +606,10 @@ students2<-function(class_id=NULL,session=NULL){ # delete this once everything i
 
 students<-function(class_id=NULL,session=NULL,refresh=F){
     cl_id<-class_id
-    if(refresh) refresh("d$student_class_map",time_gap_hours = 0) ->> d$student_class_map
+    if(refresh) {
+        refresh("d$student_class_map",time_gap_hours = 0) ->> d$student_class_map
+        refresh("d$tbl_auth",time_gap_hours = 0) ->> d$tbl_auth
+    }
     if(!is.null(class_id)) {
          outp<- d$tbl_auth[d$student_class_map[class_id==cl_id],.(student_id,first_name,last_name,grade_id,user_state),on=.(user_id=student_id)] 
         }else
