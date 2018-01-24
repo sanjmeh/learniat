@@ -1,6 +1,6 @@
 library(RMySQL)
 library(DBI)
-library(XML)
+library(xml2)
 library(magrittr)
 library(stringr)
 library(formattable)
@@ -8,7 +8,7 @@ library(tidyr)
 library(dplyr)
 library(lubridate)
 library(jsonlite)
-library(compareDF)
+#library(compareDF)
 
 this.file <- parent.frame(2)$ofile
 if(str_detect(this.file,"Dropbox")) ubuntu<-F else ununtu <-T
@@ -451,7 +451,7 @@ RefreshMyApp<-function(userid=0,uuid="BLANK"){
 #* @get /RefreshJoinedStudents
 RefreshJoinedStudents<-function(user=NULL,session=NULL){
         slist<- students(session=session,refresh = T)
-        joined<-data.table(number=slist[user_state==10,.N],registered=nrow(slist))
+        joined<-data.table(number=slist[user_state %in% c(10,11),.N],registered=nrow(slist))
         log(api="RefreshJoinedStudents",user=user, parameters=paste("session:",session),returned_value=toJSON(joined))
         joined
 }

@@ -11,7 +11,8 @@ library(RCurl)
 library(data.table)
 
 #----initializations-------
-loaded_file <- parent.frame(2)$ofile
+#loaded_file <- parent.frame(2)$ofile
+loaded_file <- utils::getSrcFilename(update_time,full.names = T)
 INDIA="Asia/Kolkata"
 dev <- T
 if(str_detect(loaded_file,"Dropbox")) ubuntu<-F else ununtu <-T
@@ -79,6 +80,7 @@ reloadDB<- function(which=NULL){
 
 
 refresh<-function(variable_name=NULL,time_gap_hours=24,history=100,transition_history=30){
+    #variable_name <- rlang::quo_name(rlang::enquo(variable_name))
     if(grepl("$",variable_name,fixed = T)){
         expr<-paste("attr(",variable_name,",which='last_upd'",")")
         condition<- is.null(eval(parse(text = variable_name))) || is.null(eval(parse(text=expr))) || time_length(now()-eval(parse(text=expr)),unit="hour") > time_gap_hours
@@ -124,18 +126,21 @@ refresh<-function(variable_name=NULL,time_gap_hours=24,history=100,transition_hi
                            "d$seat_assignments"=suppressWarnings(querysql("SELECT * FROM seat_assignments" )),
                            "d$category"=suppressWarnings(querysql("SELECT * FROM category" )),
                            "d$elements"=suppressWarnings(querysql("SELECT * FROM elements" )),
+                           "d$transaction_types"=suppressWarnings(querysql("SELECT * FROM transaction_types" )),
                            
                            
                            "Missing variable in refresh function")
         updated_df_withtime<-update_time(updated_df)
     } 
-    if(exists("updated_df_withtime") && nrow(updated_df_withtime)<2) {
+    if(exists("updated_df_withtime") && nrow(updated_df_withtime)<1) {
         message(paste(variable_name,":","either zero rows found or variable cannot be refreshed due to a problem"))
         }else 
         if(exists("updated_df_withtime") && (rows<-nrow(updated_df_withtime)) >1 ) cat(paste0("loaded:",variable_name,":",rows," rows\n")) 
     if(exists("updated_df_withtime")) updated_df_withtime else {
         cat(".")   
         as.data.table(eval(parse(text = variable_name)))
+        #as.data.table(get(variable_name))
+        
     }
 }
 
@@ -186,7 +191,6 @@ if(exists("b") && !ubuntu && is.list(b) && length(b)==15){
     }
     if (grepl(marker_b,"MAMP") & ! MAMP  || !grepl(marker_b,"MAMP") & MAMP) reloadDB(which="big")
 }
-
 if(exists("d") && !ubuntu && is.list(d)) {
     if(length(d$tbl_auth)==18) marker_d <- d$tbl_auth$latitude[1]
     if (marker_d == 99 & ! MAMP  || marker_d !=99 & MAMP) 
@@ -243,9 +247,9 @@ display_ipad_image<-function(ass_ansid=NULL,image_file=NULL,recency_minutes=10){
     rasterImage(png_obj,0,0,1024,768)    
 }
 
-classid<-function(session_id,recent=24){
+classid<-function(session_id,recent=1000){
     refresh("b$sessions100",time_gap_hours = recent)->>b$sessions100
-    b$sessions100[class_session_id==session_id,class_id]
+    b$sessions100[class_session_id %in% session_id,class_id]
 }
 
 school<-function(school_id=NULL){
@@ -343,7 +347,7 @@ change_teacher<-function(class=NULL,teacher=NULL){
     runsql(script)
 }
 
-change_class_name<-function(classid=NULL,new_name=NULL){
+rename_class<-function(classid=NULL,new_name=NULL){
     if(!is.null(classid) && !is.null(new_name)) script<-sprintf("UPDATE classes SET class_name = '%s' WHERE class_id= %d LIMIT 1",new_name,classid) else return("error")
     runsql(script)
 }
@@ -482,8 +486,12 @@ dt1[,best_room := .SD[order(-utiliz)]$room[1], by=class
 
 valid_rooms<-function(singclass=NULL){
     classes()[,.(class_id,class_name,stud_regist)
-              ][rooms(),.(room_id,seat_counts,class_id,class_name),by=.EACHI,on="stud_regist<=seat_counts"
-                ][class_id == singclass][,room_id]
+              ][rooms(),.(class_id,room_id),on=.(stud_regist<=seat_counts),by=.EACHI
+                ][class_id == singclass][["room_id"]]
+}
+
+room_matrix <- function(class=14){
+    rooms()[room_id %in% valid_rooms(class)][,ut:=percent(classes()[class_id==class,stud_regist]/seat_counts)] [order(room_id)]
 }
 
 room_to_classes<-function(uniform=F,reverse=F){ # this function is useless. Ignore. Will be deleted soon
@@ -959,6 +967,16 @@ main_topics_inClass<-function(class=2) {
                      ][subtcounts,.(topic_id,main_topic=topic_name,subtopic_counts=N),on=.(topic_id=parent_topic_id),nomatch=0]
 }
 
+ques_inClass <- function(classid=NULL){
+  t <- class_details(classid = classid,names = F)[["topics"]]
+  q<-ques()[topic_id %in% t]
+  q[d$topic,.(qid,ques,type,topic_id,topic_name,parent),on="topic_id",nomatch=0
+    ][d$topic,.(qid,ques,type,topic_id,topic_name,main_topic=i.topic_name),on=.(parent=topic_id),nomatch=0
+      ][type==2,options:=lapply(qid,FUN = function(x){mrq(x)$options$question_option})
+        ][type==2,ans:=lapply(qid,FUN = function(x){mrq(x)$options$is_ans})
+          ][order(main_topic,topic_name,qid)]
+}
+
 subtopics<- function(main=NULL,subj=NULL) { # completely overhauled so that we have no separate id and pattern paramters
     tt<- c(!is.null(main),!is.null(subj))
     if(identical(tt,c(T,F))){
@@ -1205,5 +1223,3 @@ sc<-start_classes
 stud<-students
 lv<-live_status
 vs<-volunteer_sessions
-
-#disconnect()

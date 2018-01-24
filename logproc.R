@@ -8,8 +8,11 @@ library(jsonlite)
 library(googlesheets)
 source("~/Dropbox/R-wd/quick.R")
 
-setwd("~/Dropbox/R-wd")
-
+loaded_file <- parent.frame(2)$ofile
+India="Asia/Kolkata"
+if(str_detect(loaded_file,"Dropbox")) setwd("~/Dropbox/R-wd")
+root_jabber <- "http://52.76.85.25"
+root_api <- "http://54.251.104.13/logs"
 
 robust_read_xml <- function(input_string) {
    tryCatch(read_xml(input_string),error=function(e){
@@ -43,11 +46,9 @@ if(grepl("http",file)) fwrite(x,file = "json.logs",sep = ";")
 x[order(-time)]
 }
 
-apache_log<-function(file_name=APLOG){
-   df <- read.csv(file.path(ROOT,file_name),sep = " ",header = F,fill = T)
-    df2<- df %>% mutate(dt=ymd_hms(paste("2017",V1,V2,V3)),log=paste(V5,V6,V7,V8,V9,V10,V11,V12,V13)) %>% rename(source=V4) %>% select(dt,source,log)
-    attributes(df2$dt)$tzone<-"Asia/Kolkata"
-    df2 %>% as.data.table()
+download_log<-function(file_name="mysql.log",jabber=F){
+    full_path<-file.path(ifelse(jabber,root_jabber,root_api),file_name)
+    readLines(full_path) 
 }
 
 api_flow<-function(logdt=NULL){
@@ -67,9 +68,9 @@ sql_flow<- function(logdt=NULL){
 
 api_log<-function(start_mdh=101112,end_mdh=101113,json_recency=5){
     {
-        time_range<-interval(start = ymd_h(paste0('2017',start_mdh),tz = India),end =ymd_h(paste0('2017',end_mdh),tz = India))
-        start_time <- ymd_hms(paste0('2017',start_mdh,'0000'),tz=India)
-        end_time<-    ymd_hms(paste0('2017',end_mdh,'0000'),tz = India)
+        time_range<-interval(start = ymd_h(paste0('2018',start_mdh),tz = India),end =ymd_h(paste0('2018',end_mdh),tz = India))
+        start_time <- ymd_hms(paste0('2018',start_mdh,'0000'),tz=India)
+        end_time<-    ymd_hms(paste0('2018',end_mdh,'0000'),tz = India)
     }
     x<- api_archive(start = start_mdh,end=end_mdh)
     if(is.data.table(x) && nrow(x) > 0)
@@ -99,8 +100,8 @@ api_archive<-function(start='101315',end='101316',number_rows=2000, truncated=F,
             node<-xml_children(node)[1]
         node
     }
-    start_time <- ymd_hms(paste0('2017',start,'0000'),tz=India)
-    end_time<-    ymd_hms(paste0('2017',end,'0000'),tz = India)
+    start_time <- ymd_hms(paste0('2018',start,'0000'),tz=India)
+    end_time<-    ymd_hms(paste0('2018',end,'0000'),tz = India)
     t1<-proc.time()
     string1<-sprintf("select * from event_log where request_time BETWEEN '%s' AND '%s' limit %d",start_time,end_time,number_rows)
     top_rows<-suppressWarnings(querysql(string1,database = database_name)) %>% rename(id=event_log_id) %>% 
@@ -202,8 +203,8 @@ api_archive<-function(start='101315',end='101316',number_rows=2000, truncated=F,
   }
 
 badly_formed_xml<-function(start='101315',end='101316',number_rows=100000){
-  start_time <- ymd_hms(paste0('2017',start,'0000'),tz=India)
-  end_time<-    ymd_hms(paste0('2017',end,'0000'),tz = India)
+  start_time <- ymd_hms(paste0('2018',start,'0000'),tz=India)
+  end_time<-    ymd_hms(paste0('2018',end,'0000'),tz = India)
   string1<-sprintf("select * from event_log where request_time BETWEEN '%s' AND '%s' limit %d",start_time,end_time,number_rows)
   all_rows<-suppressWarnings(querysql(string1,database = database_name)) %>% 
     mutate(request_time=ymd_hms(request_time,tz=India)) %>% select(service_name,type,request_time,xml_input,xml_output) %>%  as.data.table()
@@ -218,13 +219,16 @@ badly_formed_xml<-function(start='101315',end='101316',number_rows=100000){
 }
 
 extr_collab<-function(pattern="FetchCategory", pattern_in="xml_input",start=1101,end=1231,limit=1000){
-  dt1 <-    ymd(paste0('2017',start),tz=India)
-  dt2 <-    ymd(paste0('2017',end),tz = India)
+  dt1 <-    ymd(paste0('2018',start),tz=India)
+  dt2 <-    ymd(paste0('2018',end),tz = India)
   sql1<-sprintf("select request_time,xml_input,xml_output from event_log where request_time BETWEEN '%s' AND '%s' limit %d",dt1,dt2,limit)
   dump<-as.data.table(querysql(sql1))
   dump[grep(pattern,get(pattern_in))]
 }
-  
+
+jout <- function(dt=NULL,row=NULL,column=""){
+    get("dt")$contents[row] %>% jsonlite::prettify()
+}
 
 fetch_xml<-function(log_id=87788,ejabberd=T,output=T,lvl=1,name=F){
   if(ejabberd) {
@@ -296,8 +300,8 @@ xmpp_new<-function(mdh1=0,mdh2=0){
         text
     }
 #---- start of xmpp_new-----
-        start<-suppressWarnings(ymd_h(paste0("2017",mdh1),tz = India))
-        end<-  suppressWarnings(ymd_h(paste0("2017",mdh2),tz = India))
+        start<-suppressWarnings(ymd_h(paste0("2018",mdh1),tz = India))
+        end<-  suppressWarnings(ymd_h(paste0("2018",mdh2),tz = India))
     raw_data<-suppressWarnings({querysql(sprintf("select * from archive where created_at BETWEEN '%s' AND '%s'",start, end),database = "ejabberd_1609")})
     if(nrow(raw_data)>0){
         created_at<-ymd_hms(raw_data$created_at,tz = India)
@@ -325,8 +329,8 @@ if(!exists("xmpp_code_lookup") || is.null(at(xmpp_code_lookup))) xmpp_code_looku
 
 # this function has errors; please use xmpp_new()
 xmpp_archive<-function(mdh1=0,mdh2=0,width=80,limit=2000,lookup=xmpp_code_lookup,refresh=F,raw=F,serial=NULL){
-  start<-ymd_h(paste0("2017",mdh1),tz = India)
-  end<-  ymd_h(paste0("2017",mdh2),tz = India)
+  start<-ymd_h(paste0("2018",mdh1),tz = India)
+  end<-  ymd_h(paste0("2018",mdh2),tz = India)
       if(refresh) {
         sql_text<-sprintf("select * from archive where created_at between '%s' AND '%s' order by created_at desc",start,end)
         suppressWarnings(querysql(sql_text,database = "ejabberd_1609")) %>% mutate(created_at=ymd_hms(created_at,tz = India)) %>% as.data.table ->> xmpp_sql_dump
@@ -408,16 +412,18 @@ xmpp_archive<-function(mdh1=0,mdh2=0,width=80,limit=2000,lookup=xmpp_code_lookup
 # }
 
 
-php_log<-function(date=NULL,app="dev",month=8){
-    if (date<10) date=paste0("0",date)
-    if (month<10) month=paste0("0",month)
-    path1<-paste0("http://54.251.104.13/learniat_",app)
-    path2<-paste0("/application/logs/log-2017-", month)
-    url_string<-paste0(path1,path2,"-",date,".log")
+php_log<-function(path="NULL",file="xx.txt"){
+    # if (date<10) date=paste0("0",date)
+    # if (month<10) month=paste0("0",month)
+    #path1<-paste0("http://54.251.104.13/learniat_",app)
+    #path2<-paste0("/application/logs/log-2018-", month)
+    #paste0(path1,path2,"-",date,".log")
+    
+    url_string<-file.path(root_api,file)
   con_log<-url(url_string)
   x<-readLines(con_log)
   close(con_log)
-  x
+  data.table(x)
 }
 
 ip_log<-function(no_hits=200,ip=NULL){
@@ -441,7 +447,7 @@ dumplog<-function(file=MYSQL_LOG){
     dt_dumped_file$V1
 }
 
-clean_log<-function(dump=NULL,clean_file="clean_dump.txt"){
+clean_log<-function(dump=NULL,clean_file="clean_dump.txt",mysql=T){
     replace_faulty_bunch<-function(logdump=NULL,list_def){
         for (i in 1:length(list_def)){
             rowspasted<-paste(logdump[list_def[[i]]],collapse  = " ")
@@ -467,11 +473,10 @@ clean_log<-function(dump=NULL,clean_file="clean_dump.txt"){
         } else return()
         group
     }
-    
-    dump<-dump[4:length(dump)]
-    fr<- grep("^2017",dump,invert = T)
+    if(mysql) dump<-dump[4:length(dump)]
+    fr<- grep("^2018",dump,invert = T)
     if(length(fr)>0){ 
-        message(sprintf("Identified %d defective log rows NOT starting with '2017'.. trying to identify bunching",length(fr)))
+        message(sprintf("Identified %d defective log rows NOT starting with '2018'.. trying to identify bunching",length(fr)))
         message(paste(fr,collapse = ","))
         list_def = group_fr(frows = fr)
         message(sprintf("\nIdentified %d bunches of rows .. trying to fix by wrapping...",length(list_def)))
@@ -483,25 +488,25 @@ clean_log<-function(dump=NULL,clean_file="clean_dump.txt"){
         }    
         message(sprintf("\nRaw dump had %d rows, and the clean dump has %d rows returned. All successful.",length(dump),length(dump_modified)))
     } else dump_modified<-dump
-    cat("\n---------\n")
-    dump_tabs<-gsub("Init DB","Initdb",dump_modified) %>% 
-        gsub("(Z[\t ]+)(\\d+) ([QCI][a-z]+)([\t ])",replacement = "Z\t\\2\t\\3\t",x = .)
+    cat("\n------\n")
+    if(mysql)
+        dump_tabs <- gsub("Init DB","Initdb",dump_modified) %>% 
+        gsub("(Z[\t ]+)(\\d+) ([QCI][a-z]+)([\t ])",replacement = "Z\t\\2\t\\3\t",x = .) else
+            dump_tabs <-  dump_modified
     
-    valid_rows<-grep("^2017",dump_tabs,value = T)
+    valid_rows<-grep("^2018",dump_tabs,value = T)
     dt_onevar<-as.data.table(valid_rows)
+    dt_no_event_log <- dt_onevar[!grepl("event_log",valid_rows)]
+    browser()
     #print(setdiff(valid_rows,dump))
-    data.table::fwrite(x = dt_onevar,file = clean_file,sep = "\t",quote = F)
+    data.table::fwrite(x = dt_no_event_log,file = clean_file,sep = "\t",quote = F)
 }
 
-refresh_sql_dump<-function(){
-    dumplog()->dump
-    clean_log(dump)->>dump2
-}
 
 check_range<-function(clean_text_file=NULL,df=NULL,time_stamp_column="time",type_column="type"){
   if(!is.null(clean_text_file)) {
       x<-fread(clean_text_file,skip = 1)[,1]
-      dates<-as.POSIXct(gsub("^(2017-[0-9]{2}-[0-9]{2})T([0-9]{2}:[0-9]{2}:\\d+).*","\\1 \\2", x$V1),tz = "UTC")
+      dates<-as.POSIXct(gsub("^(2018-[0-9]{2}-[0-9]{2})T([0-9]{2}:[0-9]{2}:\\d+).*","\\1 \\2", x$V1),tz = "UTC")
       attributes(dates)$tzone<-India
   r<-range(dates)
   } else
@@ -513,62 +518,63 @@ check_range<-function(clean_text_file=NULL,df=NULL,time_stamp_column="time",type
     r
 }
 
-mlogs<-function(mdh1=0,mdh2=0,file="clean_dump.txt",width=NULL,clean_text=dump2,xmpp=F,query_detail=1,query_only=T,logid=NULL,serial=NULL,verbose=F){
-    w<-ifelse(is.null(width),getOption("width")-70,width)
-    if(sum(mdh1,mdh2)>0){
-        start<-ymd_h(paste0("2017",mdh1),tz = India)
-        end<-  ymd_h(paste0("2017",mdh2),tz = India)
-        int_par<-interval(start,end)
+mlogs<-function(mdh1=0,mdh2=0,file="clean_dump.txt",width=NULL,dt=NULL,xmpp=F,query_detail=1,query_only=T,logid=NULL,serial=NULL,verbose=F){
+  w<-ifelse(is.null(width),getOption("width")-70,width)
+  if (is.null(dt)) 
+    {
+    if(mdh1>0 & mdh2>0){
+    start<-ymd_h(paste0("2018",mdh1),tz = India)
+    end<-  ymd_h(paste0("2018",mdh2),tz = India)
+    int_par<-interval(start,end)
+    }else  stop("Mandtory parameters missing")
     }
     cat(paste("Starting to read", file,"...\n"))
     dump2<-suppressWarnings(fread(file,col.names = c("dt","id","type","command"),fill = T))
     if (nrow(dump2)<2) {
-        message("Error : nothing to process")
-     return("Error : nothing to process")
-    } else
-        if (!is.null(logid)) {
-            specific_id<-dump2[id %in% logid]
-            value<-if (is.null(serial)) specific_id$command else specific_id$command[serial]
-            return(value)
-        }
-    
-            dump2$dt<-ymd_hms(dump2$dt,tz = India)
-            range_in_dump<-range(dump2$dt)
-            dump_interval<-interval(range_in_dump[1],range_in_dump[2])
-            if(!int_overlaps(int_par,dump_interval)) {
-              message("Error: The MySQL dump date range does not overlap with the date range in the parameter")
-              str<-sprintf("The MySQL dump saved in '%s' has a date range of: %s",file,dump_interval)
-              message(str)
-              return("Error")
-            }
-            if(query_only) dump3<-dump2 %>% filter(int_overlaps(int_par,dt %--% dt),type=="Query") else 
-              dump3<-dump2 %>% filter(int_overlaps(int_par,dt %--% dt))
-            dump2$command<-str_trim(dump2$command)
-            str_remove<-"ZZZZ"
-            if(!xmpp) str_remove<-paste0(str_remove,"|\\{title|pubsub|sr_group|sr_user|insert into archive|UPDATE last|query_cache_type|muc|roster|motd|jid")
-            if(query_detail<=3) str_remove<-paste0(str_remove,"|delete from live_session_status|utf|commit|begin")
-            if(query_detail<=2) str_remove<-paste0(str_remove,"|update event_log")
-            if(query_detail<=1) str_remove<-paste0(str_remove,"|select|SELECT")
-            if (is.null(serial)) 
-                value<- dump3 %>%  
-                        filter(!grepl(str_remove,command,ignore.case = T)) %>% 
-                        mutate(service_name=toupper(gsub("(\\w+)(.*)","\\1",command)),woq=gsub("`","",command),
-                                sqltable=tolower(
-                                    case_when(
-                                        service_name=="UPDATE" ~ gsub("\\bupdate\\s(\\w+).*","\\1",command,ignore.case = T),
-                                        service_name=="SELECT" & (grepl("from",ignore.case = T,command)) ~ gsub(".*from\\s+\\W?(\\w+).*","\\1",command,ignore.case = T),
-                                        service_name=="INSERT" ~ gsub("insert into ([A-z.]+)[( ]+\\w+.*","\\1",woq,ignore.case = T)
-                                    )
-                                ),
-                       contents=str_trunc(woq,width = w)
-                ) %>% select (-command,-woq) %>% as.data.table()
-            value
+      message("Error : nothing to process from the file")
+      return("Error : nothing to process from the file")
+    }
+    if(is.null(dt)){
+    dump2$dt<-ymd_hms(dump2$dt,tz = India)
+    range_in_dump<-range(dump2$dt)
+    dump_interval<-interval(range_in_dump[1],range_in_dump[2])
+    if(!int_overlaps(int_par,dump_interval)) {
+      message("Error: The MySQL dump date range does not overlap with the date range in the parameter")
+      str<-sprintf("The MySQL dump saved in '%s' has a date range of: %s",file,dump_interval)
+      message(str)
+      return("Error")
+    }
+    if(query_only) dump3<-dump2 %>% filter(int_overlaps(int_par,dt %--% dt),type=="Query") else 
+      dump3<-dump2 %>% filter(int_overlaps(int_par,dt %--% dt))
+    dump2$command<-str_trim(dump2$command)
+    str_remove<-"ZZZZ"
+    if(!xmpp) str_remove<-paste0(str_remove,"|\\{title|pubsub|sr_group|sr_user|insert into archive|UPDATE last|query_cache_type|muc|roster|motd|jid")
+    if(query_detail<=3) str_remove<-paste0(str_remove,"|delete from live_session_status|utf|commit|begin")
+    if(query_detail<=2 ) str_remove<-paste0(str_remove,"|update event_log")
+    if(query_detail<=1) str_remove<-paste0(str_remove,"|select|SELECT")
+    if (is.null(serial)) 
+      value<- dump3 %>%  
+      filter(!grepl(str_remove,command,ignore.case = T)) %>% 
+      mutate(service_name=toupper(gsub("(\\w+)(.*)","\\1",command)),woq=gsub("`","",command),
+             sqltable=tolower(
+               case_when(
+                 service_name=="UPDATE" ~ gsub("\\bupdate\\s(\\w+).*","\\1",command,ignore.case = T),
+                 service_name=="SELECT" & (grepl("from",ignore.case = T,command)) ~ gsub(".*from\\s+\\W?(\\w+).*","\\1",command,ignore.case = T),
+                 service_name=="INSERT" ~ gsub("insert into ([A-z.]+)[( ]+\\w+.*","\\1",woq,ignore.case = T),
+                 service_name=="DELETE" ~ gsub("delete from ([A-z.]+)[( ]+\\w+.*","\\1",woq,ignore.case = T)
+               )
+             ),
+             contents=str_trunc(woq,width = w)
+      ) %>% select (-command,-woq) %>% as.data.table()
+  } else 
+    value<- dump2[id==logid,command]
+  value
 }
 
 comblog<-function(mdh1=111215,mdh2 =101316,mysql=F,
                   xmpp_detail=2, mysql_detail=2,refresh=F,clean_file="clean_dump.txt", max_lines=100000){
- #----Initialise variables -----
-    parrange<-range(ymd_h(paste0('2017',mdh1),tz = India),ymd_h(paste0('2017',mdh2),tz = India))
+ #----Initialize variables -----
+    parrange<-range(ymd_h(paste0('2018',mdh1),tz = India),ymd_h(paste0('2018',mdh2),tz = India))
     int_par<-interval(parrange[1],parrange[2])
     xapi    <-  data.table()
     ymysql  <-  data.table()
@@ -578,7 +584,7 @@ comblog<-function(mdh1=111215,mdh2 =101316,mysql=F,
         print(paste("Time when last dump of clean_file was taken :",now()-last_modified))
         if(now()-last_modified > dseconds(30) ) {
             cat("starting to dump file from AWS server...") 
-            dumplog(number_lines = max_lines)->dump1
+            download_log(file_name = MYSQL_LOG,jabber = F)->dump1
             cat("completed file dump\nstarted cleaning of log...")
             clean_log(dump = dump1)
             cat("completed cleaning\n")
@@ -716,10 +722,17 @@ slow_query<-function(relative_path="/logs/slow.log",df=NULL){
 
 ejabber_logs<-function(x=NULL){
     x %>% filter(grepl("sql",X1)) %>% select(1) ->sql_log
-    x %>% filter(grepl("2017",X1)) -> datelog
+    x %>% filter(grepl("2018",X1)) -> datelog
     datelog %<>% mutate(time=ymd_hms(paste(datelog$X1,datelog$X2)))
     datelog %>% select(time,X4) %>% group_by(Minute=sprintf("%02d%3s:%02d:%02d",day(time),month(time,label = T),hour(time),minute(time)),field=X4) %>% ungroup()
 }
+
+ejd_term<-function(screen_string=scrcopy){
+    fread(screen_string,header = F) ->x1
+    x1[,.(sess=as.integer(str_extract(string = V8,pattern = "\\d++")))]->x2
+    b$sessions100[x2,on=.(class_session_id=sess)]
+}
+
 
 read_capi<-function(no_lines=14690, pattern="public", local_file="/Applications/MAMP/htdocs/jupiter/commonAPI.php"){
     x<-readLines(con = local_file,n = no_lines) %>% gsub("\\s+"," ",.)
