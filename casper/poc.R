@@ -116,7 +116,7 @@ server <- function(input,output,session){
     if(endtime<strttime) {
       shinyalert(title = "Error in Date/Time",text="Check end time is greater than start time",type = "error")
     } else {
-      data <<- add_booking(booking) 
+      add_booking(booking) 
     }
   })
   session$onSessionEnded(stopApp)
