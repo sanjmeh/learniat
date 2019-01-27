@@ -1,4 +1,5 @@
 library(shiny)
+library(shinyWidgets)
 library(data.table)
 library(lubridate)
 library(magrittr)
@@ -28,9 +29,57 @@ add_booking <- function(data,booking){
     }
 }
 
+css <- 
+  "
+body {
+background: #00ffff;
+}
+
+* { font-size:5vw;}
+
+.green {
+background: green;
+}
+
+.shiny-date-input {
+font-size:3vw;
+height:200%;
+}
+
+.control-label {
+font-size:2vw;
+color:6495ED;
+}
+
+.selectize-input {
+font-size: 2vw;
+line-height: 2;
+}
+
+ .selectize-dropdown-content {
+font-size:2vw;
+line-height: 2;
+max-height: 50vh;
+}
+
+#submit {
+font-weight: bold;
+font-size: 4vw;
+padding: 1vw 1vh;
+}
+
+.form-control {
+font-size: 2vw;
+line-height: 2;
+height:200%
+}
+"
 
 ui <- fluidPage(
   useShinyalert(),
+  tags$head(
+    tags$style(css)
+    ),
   fluidRow(
     column(width = 6,
            selectInput("flat","Flat number",choices=101:199,selected = NA),
@@ -38,9 +87,9 @@ ui <- fluidPage(
     ),
     column(width = 6,
            dateInput("date",label = "Date",min = now(),max = now()+ddays(180),value = now() + ddays(1),startview = "month"),
-           numericInput("sttime",label = "Start Hour",value = hour(now())+1,step = 1,min = 6,max = 23),
-           numericInput("endtime",label = "End Hour",value =hour(now()) + 2,step = 1,min = 6,max = 24),
-           actionButton("submit","SUBMIT")
+           selectInput("sttime",label = "Start Hour",selected = 8,choices = 6:23,multiple = F,selectize = T),
+           selectInput("endtime",label = "End Hour",selected = 18,choices = 7:24,multiple = F,selectize = T),
+           actionButton(class = "btn-success","submit","SUBMIT")
     ),
     h3(textOutput("confirm"))
   )
@@ -53,7 +102,7 @@ server <- function(input,output,session){
   #data[,int:=lubridate::interval(strt,end)]
   observeEvent(input$submit,{
     strttime <- paste(as.character(input$date),paste(input$sttime,":01")) %>% ymd_hm(tz = "Asia/Kolkata") 
-    endtime <- paste(as.character(input$date),paste(input$endtime - 1,":59")) %>% ymd_hm(tz = "Asia/Kolkata") 
+    endtime <- paste(as.character(input$date),paste(as.numeric(input$endtime) - 1,":59")) %>% ymd_hm(tz = "Asia/Kolkata") 
     booking <- data.table(flat=input$flat,resource=input$resourcename,strt=strttime,end=endtime,status="UNCONFIRMED")
     if(endtime<strttime) {
       shinyalert(title = "Error in Date/Time",text="Check end time is greater than start time",type = "error")
