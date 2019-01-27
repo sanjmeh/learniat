@@ -11,9 +11,7 @@ add_booking <- function(data,booking){
   cat("\nBooking row passed to function\n")
   print(booking)
   #fdata <- data[resource==booking$resource]
-  cat("\nFiltered rows of data\n")
   fdata <- data[resource==booking$resource]
-  print(fdata)
   print(int_overlaps(fdata$strt %--% fdata$end,booking$strt %--% booking$end) %>% unlist)
   #print(seq_len(nrow(fdata)) %>% map(~int_overlaps(booking$int,fdata$int[.x])) %>%  unlist)
   #print(fdata)
@@ -35,44 +33,51 @@ body {
 background: #00ffff;
 }
 
-* { font-size:5vw;}
+* { font-size:24px;}
 
 .green {
 background: green;
 }
 
 .shiny-date-input {
-font-size:3vw;
+font-size:24px;
 height:200%;
 }
 
+.shiny-input-container{
+height:200%;
+font-size:24px;
+}
+
 .control-label {
-font-size:2vw;
+font-size:18px;
 color:6495ED;
 }
 
+.form-control {
+font-size: 36px;
+line-height: 2;
+height:200%
+}
+
 .selectize-input {
-font-size: 2vw;
+font-size: 18px;
 line-height: 2;
 }
 
  .selectize-dropdown-content {
-font-size:2vw;
+font-size:18px;
 line-height: 2;
-max-height: 50vh;
+max-height: 75vh;
 }
 
 #submit {
 font-weight: bold;
-font-size: 4vw;
+font-size: 1.2em;
 padding: 1vw 1vh;
 }
 
-.form-control {
-font-size: 2vw;
-line-height: 2;
-height:200%
-}
+
 "
 
 ui <- fluidPage(
@@ -99,7 +104,6 @@ server <- function(input,output,session){
   data<- fread("data.csv")
   data$strt %<>% ymd_hms(tz = "Asia/Kolkata")
   data$end %<>% ymd_hms(tz = "Asia/Kolkata")
-  #data[,int:=lubridate::interval(strt,end)]
   observeEvent(input$submit,{
     strttime <- paste(as.character(input$date),paste(input$sttime,":01")) %>% ymd_hm(tz = "Asia/Kolkata") 
     endtime <- paste(as.character(input$date),paste(as.numeric(input$endtime) - 1,":59")) %>% ymd_hm(tz = "Asia/Kolkata") 
@@ -108,8 +112,6 @@ server <- function(input,output,session){
       shinyalert(title = "Error in Date/Time",text="Check end time is greater than start time",type = "error")
     } else {
       data <<- add_booking(data,booking) 
-      cat("\nFull data returned by function:\n")
-      print(data)
     }
   })
   session$onSessionEnded(stopApp)
