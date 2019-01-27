@@ -7,23 +7,30 @@ library(shinycssloaders)
 library(shinyalert)
 library(purrr)
 
-add_booking <- function(data,booking){
+add_booking <- function(booking){
+  data<- fread("data.csv")
+  data$strt %<>% ymd_hms(tz = "Asia/Kolkata")
+  data$end %<>% ymd_hms(tz = "Asia/Kolkata")
+  data$timestamp %<>% ymd_hms(tz = "Asia/Kolkata")
+  
   cat("\nBooking row passed to function\n")
   print(booking)
-  #fdata <- data[resource==booking$resource]
   fdata <- data[resource==booking$resource]
   print(int_overlaps(fdata$strt %--% fdata$end,booking$strt %--% booking$end) %>% unlist)
-  #print(seq_len(nrow(fdata)) %>% map(~int_overlaps(booking$int,fdata$int[.x])) %>%  unlist)
-  #print(fdata)
-  if(int_overlaps(fdata$strt %--% fdata$end,booking$strt %--% booking$end) %>% unlist %>% any)
+  if(int_overlaps(fdata$strt %--% fdata$end,booking$strt %--% booking$end) %>% unlist %>% any) # we donot need map
     {
     shinyalert(title = "CLASH",text="Your booking time period clashes with atleast 1 more booking",type = "error")
     data
     } else
     {
-      fwrite(booking[,status:="Booked"],append = T,file = "data.csv")
+      newrow <- booking[,status:="Booked"][,timestamp:=now()]
+      cat("\nNew ROW to be added:\n")
+      print(newrow)
+      cat("\nColumns of data:\n")
+      print(tibble::glimpse(data))
+      fwrite(newrow,append = T,file = "data.csv")
       shinyalert("BOOKING SUCCESS!",text = paste0("Your booking for '",booking$resource,"' is confirmed from\n",booking$strt," to ",booking$end),type = "success")
-      rbind(data,booking)
+      rbind(data,newrow)
     }
 }
 
@@ -101,9 +108,7 @@ ui <- fluidPage(
 )
 
 server <- function(input,output,session){
-  data<- fread("data.csv")
-  data$strt %<>% ymd_hms(tz = "Asia/Kolkata")
-  data$end %<>% ymd_hms(tz = "Asia/Kolkata")
+  
   observeEvent(input$submit,{
     strttime <- paste(as.character(input$date),paste(input$sttime,":01")) %>% ymd_hm(tz = "Asia/Kolkata") 
     endtime <- paste(as.character(input$date),paste(as.numeric(input$endtime) - 1,":59")) %>% ymd_hm(tz = "Asia/Kolkata") 
@@ -111,7 +116,7 @@ server <- function(input,output,session){
     if(endtime<strttime) {
       shinyalert(title = "Error in Date/Time",text="Check end time is greater than start time",type = "error")
     } else {
-      data <<- add_booking(data,booking) 
+      data <<- add_booking(booking) 
     }
   })
   session$onSessionEnded(stopApp)
